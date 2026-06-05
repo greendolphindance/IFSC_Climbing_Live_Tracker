@@ -977,7 +977,7 @@ p {
 }
 
 .event-row.event-rank-up span {
-  color: #5df0a4;
+  color: #ff8fcb;
 }
 
 .event-row.event-rank-down span {
@@ -1296,7 +1296,7 @@ pre {
 }
 
 .theme-light .event-row.event-rank-up span {
-  color: #177447;
+  color: #c42f7b;
 }
 
 .theme-light .event-row.event-rank-down span {

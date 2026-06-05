@@ -290,12 +290,45 @@ function groupedRoutes(state: CompetitionState) {
   const maxBoulders = Math.max(4, ...state.snapshot.athletes.map((result) => result.boulders.length));
   return groups.map((group) => ({
     name: group ?? "Routes",
-    routes: Array.from({ length: maxBoulders }, (_, index) => {
-      const boulderNo = index + 1;
-      const live = state.currentClimbers.find((climber) => (climber.startingGroup ?? undefined) === group && climber.currentBoulder === boulderNo);
-      return { group, boulderNo, live };
-    })
+    routes: routeAssignmentsForGroup(state, group, maxBoulders)
   }));
+}
+
+function routeAssignmentsForGroup(state: CompetitionState, group: string | undefined, maxBoulders: number): RouteSlot[] {
+  const routes: RouteSlot[] = Array.from({ length: maxBoulders }, (_, index) => ({ group, boulderNo: index + 1 }));
+  const groupClimbers = state.currentClimbers
+    .filter((climber) => (climber.startingGroup ?? undefined) === group)
+    .sort((a, b) => athleteStartOrder(state, a.athleteId) - athleteStartOrder(state, b.athleteId));
+  const occupied = new Set<number>();
+
+  for (const climber of groupClimbers) {
+    const preferred = clampRoute(climber.currentBoulder, maxBoulders);
+    const boulderNo = preferred && !occupied.has(preferred) ? preferred : firstOpenRoute(occupied, maxBoulders, preferred);
+    if (!boulderNo) continue;
+    occupied.add(boulderNo);
+    routes[boulderNo - 1].live = { ...climber, currentBoulder: boulderNo };
+  }
+
+  return routes;
+}
+
+function athleteStartOrder(state: CompetitionState, athleteId: string) {
+  return state.snapshot.athletes.find((result) => result.athlete.id === athleteId)?.athlete.startOrder ?? 999;
+}
+
+function clampRoute(route: number | undefined, maxBoulders: number) {
+  return route && route >= 1 && route <= maxBoulders ? route : undefined;
+}
+
+function firstOpenRoute(occupied: Set<number>, maxBoulders: number, preferred: number | undefined) {
+  const start = preferred ?? 1;
+  for (let route = start; route <= maxBoulders; route += 1) {
+    if (!occupied.has(route)) return route;
+  }
+  for (let route = 1; route < start; route += 1) {
+    if (!occupied.has(route)) return route;
+  }
+  return undefined;
 }
 
 function groupNames(state: CompetitionState) {

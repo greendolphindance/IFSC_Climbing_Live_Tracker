@@ -604,10 +604,19 @@ function toBoulderResult(ascent: IfscAscent): BoulderResult {
 }
 
 function activeBoulderFromAscents(ascents?: IfscAscent[]) {
-  const active = ascents?.find((ascent) => ascent.status !== "confirmed");
+  const activeAscents = (ascents ?? []).filter((ascent) => ascent.status !== "confirmed");
+  const latestModified = activeAscents
+    .map((ascent) => ({ ascent, timestamp: ascent.modified ? Date.parse(ascent.modified) : Number.NaN }))
+    .filter((entry) => Number.isFinite(entry.timestamp))
+    .sort((a, b) => b.timestamp - a.timestamp)[0]?.ascent;
+  const active = latestModified ?? activeAscents[0];
   if (!active) return undefined;
-  const routeNo = Number(active.route_name);
-  return Number.isFinite(routeNo) ? routeNo : undefined;
+  return routeNoFromAscent(active);
+}
+
+function routeNoFromAscent(ascent: IfscAscent) {
+  const routeNo = Number(ascent.route_name);
+  return Number.isFinite(routeNo) ? routeNo : ascent.route_id;
 }
 
 function emptyBouldersFromStartlist(entry?: IfscStartlistEntry): BoulderResult[] {
