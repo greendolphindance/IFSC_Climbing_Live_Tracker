@@ -24,7 +24,7 @@ COMP_SOURCE=ifsc IFSC_ROUND_URL=https://ifsc.results.info/event/1480/cr/10385 np
 ## Deploy to Vercel
 
 Vercel uses the Vite static build plus the serverless endpoint in `api/state.ts`.
-Set these environment variables in the Vercel project:
+Set these environment variables in the Vercel project to choose the default round:
 
 ```sh
 COMP_SOURCE=ifsc
@@ -39,6 +39,10 @@ Build settings:
 
 The production frontend polls `/api/state` every 2 seconds. Local development still
 uses the Fastify server and SSE endpoint from `server/src/index.ts`.
+
+Users can paste another IFSC round URL into the page. The frontend will request
+`/api/state?roundUrl=...`, so the deployment is not locked to the default
+environment-variable round.
 
 ## IFSC Network Capture
 

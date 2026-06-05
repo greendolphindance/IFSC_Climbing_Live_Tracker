@@ -1,15 +1,16 @@
-import { createRoundSourceFromEnv, IfscAdapter } from "../server/src/adapters/IfscAdapter.js";
+import { createRoundSourceFromEnv, IfscAdapter, IfscRestRoundSource, type RoundSource } from "../server/src/adapters/IfscAdapter.js";
 import { CompetitionStateMachine } from "../server/src/state/CompetitionStateMachine.js";
 
-const adapter = new IfscAdapter(createRoundSourceFromEnv());
-const machine = new CompetitionStateMachine();
+const runtimes = new Map<string, { adapter: IfscAdapter; machine: CompetitionStateMachine }>();
 
-export default async function handler(_: unknown, response: {
+export default async function handler(request: { query?: { roundUrl?: string | string[] } }, response: {
   status: (code: number) => { json: (body: unknown) => void };
   setHeader: (name: string, value: string) => void;
 }) {
   response.setHeader("Cache-Control", "no-store, max-age=0");
   try {
+    const roundUrl = readRoundUrl(request);
+    const { adapter, machine } = runtimeFor(roundUrl);
     const snapshot = await adapter.fetchSnapshot();
     const state = machine.apply(snapshot, adapter.sourceName(), adapter.refreshMs());
     response.status(200).json(state);
@@ -18,4 +19,27 @@ export default async function handler(_: unknown, response: {
       error: error instanceof Error ? error.message : "Failed to update competition state"
     });
   }
+}
+
+function readRoundUrl(request: { query?: { roundUrl?: string | string[] } }) {
+  const value = request.query?.roundUrl;
+  const roundUrl = Array.isArray(value) ? value[0] : value;
+  if (!roundUrl) return undefined;
+  if (!/^https:\/\/ifsc\.results\.info\/event\/\d+\/cr\/\d+\/?$/.test(roundUrl)) {
+    throw new Error("Unsupported IFSC round URL. Use a URL like https://ifsc.results.info/event/1480/cr/10677");
+  }
+  return roundUrl;
+}
+
+function runtimeFor(roundUrl: string | undefined) {
+  const key = roundUrl ?? "__env__";
+  const existing = runtimes.get(key);
+  if (existing) return existing;
+  const source: RoundSource = roundUrl ? new IfscRestRoundSource(roundUrl) : createRoundSourceFromEnv();
+  const runtime = {
+    adapter: new IfscAdapter(source),
+    machine: new CompetitionStateMachine()
+  };
+  runtimes.set(key, runtime);
+  return runtime;
 }
