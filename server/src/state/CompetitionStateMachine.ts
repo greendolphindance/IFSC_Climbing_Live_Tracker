@@ -119,7 +119,7 @@ export class CompetitionStateMachine {
       }
       const beforeAttempts = attemptCount(previous);
       const currentAttempts = attemptCount(boulder);
-      if (currentAttempts > beforeAttempts && previous.hasZone === boulder.hasZone && previous.hasTop === boulder.hasTop) {
+      if (current.sourceStatus === "active" && currentAttempts > beforeAttempts && previous.hasZone === boulder.hasZone && previous.hasTop === boulder.hasTop) {
         events.push(this.athleteEvent("ATTEMPT_UPDATED", current, boulder, timestamp, `${current.athlete.name} attempt ${currentAttempts} on Boulder ${boulder.boulderNo}`, "derived"));
       }
     }
@@ -170,10 +170,7 @@ export class CompetitionStateMachine {
   }
 
   private buildLiveStates(snapshot: CompetitionSnapshot, previous: CompetitionSnapshot | undefined, deltaEvents: CompetitionEvent[]): AthleteLiveState[] {
-    const activeAthletes = new Set([
-      ...deltaEvents.filter((event) => ["ZONE_REACHED", "TOP_REACHED", "ATTEMPT_UPDATED"].includes(event.type)).map((event) => event.athleteId),
-      ...snapshot.athletes.filter((result) => result.sourceStatus === "active").map((result) => result.athlete.id)
-    ]);
+    const activeAthletes = new Set(snapshot.athletes.filter((result) => result.sourceStatus === "active").map((result) => result.athlete.id));
     const appealAthletes = new Set(snapshot.appeals.filter((appeal) => appeal.status === "Under Appeal" || appeal.status === "Pending").map((appeal) => appeal.athleteId));
 
     return snapshot.athletes.map((result) => {
@@ -190,8 +187,8 @@ export class CompetitionStateMachine {
       const currentBoulderResult = result.boulders.find((boulder) => boulder.boulderNo === currentBoulder);
       const confidence: Confidence = result.sourceStatus === "active"
         ? { value: 98, reason: "Official IFSC payload marks this athlete active.", source: "official" }
-        : activeAthletes.has(result.athlete.id)
-        ? { value: 88, reason: "Recent official result delta identifies this athlete as active.", source: "derived" }
+        : changedBoulder
+        ? { value: 88, reason: "Recent official result delta identifies this athlete as rotating, not currently active.", source: "derived" }
         : { value: 65, reason: "No explicit live field; state is estimated from boulder progress and startlist.", source: "estimated" };
 
       return {
