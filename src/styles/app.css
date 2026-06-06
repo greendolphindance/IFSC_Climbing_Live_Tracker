@@ -263,11 +263,15 @@ p {
 
 .routes-layout .main-column,
 .routes-layout .side-column {
-  height: 100%;
+  height: 720px;
 }
 
 .routes-layout .main-column {
   grid-template-rows: auto minmax(0, 1fr);
+}
+
+.routes-layout .side-column {
+  align-content: stretch;
 }
 
 .main-column,
@@ -281,7 +285,13 @@ p {
 .athlete-layout .side-column {
   grid-template-rows: auto minmax(0, 1fr);
   align-content: stretch;
-  height: 100%;
+  align-self: stretch;
+  min-height: 0;
+}
+
+.athlete-layout .main-column {
+  align-self: stretch;
+  min-height: 600px;
 }
 
 .panel {
@@ -539,18 +549,22 @@ p {
   min-height: 0;
 }
 
-.route-ranking-shell.long-ranking-shell {
-  height: 1434px;
+.route-ranking-shell {
+  height: 100%;
   display: flex;
   flex-direction: column;
 }
 
-.route-ranking-shell.long-ranking-shell .ranking-panel {
+.route-ranking-shell .ranking-panel {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
   padding-right: 4px;
+}
+
+.athlete-ranking-shell {
+  min-height: 600px;
 }
 
 .ranking-switch {
@@ -896,7 +910,14 @@ p {
   padding: 8px 0;
 }
 
-.event-list,
+.event-list {
+  display: block;
+}
+
+.event-row + .event-row {
+  margin-top: 8px;
+}
+
 .timeline-list {
   display: grid;
   gap: 8px;
@@ -915,6 +936,10 @@ p {
 .route-feed .panel {
   min-height: 0;
   overflow: hidden;
+}
+
+.athlete-side-feed {
+  align-self: stretch;
 }
 
 .athlete-side-feed .panel,
@@ -1175,6 +1200,12 @@ pre {
 }
 
 .theme-light .tabs button.active {
+  background: #cfe4fb;
+  border-color: #2490c3;
+  color: #0b2239;
+}
+
+.theme-light .error-actions button {
   background: #cfe4fb;
   border-color: #2490c3;
   color: #0b2239;
@@ -1502,6 +1533,14 @@ pre {
     gap: 14px;
   }
 
+  .routes-layout .main-column,
+  .routes-layout .side-column,
+  .athlete-layout .main-column,
+  .athlete-layout .side-column {
+    height: auto;
+    min-height: 0;
+  }
+
   .main-column,
   .side-column {
     gap: 14px;
@@ -1569,6 +1608,23 @@ pre {
   .switch-toggle.on strong {
     padding-left: 0;
     padding-right: 11px;
+  }
+
+  .mobile-heading-controls .compact-toggle {
+    width: 42px;
+  }
+
+  .mobile-heading-controls .compact-toggle.on span {
+    transform: translateX(24px);
+  }
+
+  .mobile-heading-controls .compact-toggle strong {
+    padding-left: 12px;
+  }
+
+  .mobile-heading-controls .compact-toggle.on strong {
+    padding-left: 0;
+    padding-right: 12px;
   }
 
   .mobile-heading-controls .full-label {
@@ -1673,6 +1729,12 @@ pre {
   .ranking-panel.compact-width,
   .ranking-panel.compact-width.split {
     width: 100%;
+  }
+
+  .route-ranking-shell,
+  .athlete-ranking-shell {
+    height: auto;
+    min-height: 0;
   }
 
   .ranking-row {

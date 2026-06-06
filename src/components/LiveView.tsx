@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import type { RefObject } from "react";
 import type { AthleteRoundResult, CompetitionEvent, CompetitionState } from "../../server/src/types/domain";
 import { athleteById, flag } from "../lib/format";
 
@@ -8,6 +9,13 @@ interface Props {
 }
 
 export function LiveView({ state, mode }: Props) {
+  const athleteMainRef = useRef<HTMLDivElement>(null);
+  const routePanelRef = useRef<HTMLDivElement>(null);
+  const isMobile = useIsMobile();
+  const athleteSyncedHeight = useElementHeight(athleteMainRef);
+  const routePanelHeight = useElementHeight(routePanelRef);
+  const routeSyncedHeight = !isMobile && routePanelHeight ? Math.max(720, routePanelHeight + 36 + 240) : 0;
+  const routeColumnStyle = routeSyncedHeight ? { height: `${routeSyncedHeight}px` } : undefined;
   const summaryEvents = state.events
     .filter((event) => event.type !== "SNAPSHOT_RECEIVED");
 
@@ -23,9 +31,11 @@ export function LiveView({ state, mode }: Props) {
     return (
       <main className="live-layout athlete-layout">
         <section className="main-column">
-          <RankingPanel state={state} boxed splitGroups compactWidth />
+          <div ref={athleteMainRef}>
+            <RankingPanel state={state} boxed splitGroups compactWidth />
+          </div>
         </section>
-        <aside className="side-column">
+        <aside className="side-column" style={athleteSyncedHeight ? { height: `${athleteSyncedHeight}px` } : undefined}>
           <RouteSummaryPanel state={state} />
           <div className="desktop-event-feed athlete-side-feed">
             <EventFeed events={summaryEvents} athletes={state.snapshot.athletes} />
@@ -37,17 +47,40 @@ export function LiveView({ state, mode }: Props) {
 
   return (
     <main className="live-layout routes-layout">
-      <section className="main-column">
-        <RoutePanel state={state} />
+      <section className="main-column" style={routeColumnStyle}>
+        <div ref={routePanelRef}>
+          <RoutePanel state={state} />
+        </div>
         <div className="desktop-event-feed route-feed">
           <EventFeed events={summaryEvents} athletes={state.snapshot.athletes} />
         </div>
       </section>
-      <aside className="side-column">
+      <aside className="side-column" style={routeColumnStyle}>
         <RankingPanel state={state} />
       </aside>
     </main>
   );
+}
+
+function useElementHeight<T extends HTMLElement>(ref: RefObject<T | null>) {
+  const [height, setHeight] = useState(0);
+
+  useLayoutEffect(() => {
+    const element = ref.current;
+    if (!element) return;
+
+    const updateHeight = () => {
+      const nextHeight = Math.ceil(element.getBoundingClientRect().height);
+      setHeight((current) => (current === nextHeight ? current : nextHeight));
+    };
+
+    updateHeight();
+    const observer = new ResizeObserver(updateHeight);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [ref]);
+
+  return height;
 }
 
 function RoutePanel({ state, compact = false }: { state: CompetitionState; compact?: boolean }) {

@@ -6,20 +6,23 @@ type Tab = "routes" | "athletes" | "feed";
 
 export function App() {
   const [tab, setTab] = useState<Tab>(() => readStoredTab());
-  const [theme, setTheme] = useState<"theme-dark" | "theme-light">(() => readStoredTheme() ?? systemTheme());
+  const [theme, setTheme] = useState<"theme-dark" | "theme-light">(() => readStoredThemeOverride() ?? systemTheme());
   const [roundUrl, setRoundUrl] = useState(() => readStoredRoundUrl());
   const [roundUrlInput, setRoundUrlInput] = useState(() => readStoredRoundUrl());
   const { state, error } = useCompetitionState(roundUrl);
 
   useEffect(() => {
-    if (readStoredTheme()) return undefined;
     const query = window.matchMedia?.("(prefers-color-scheme: dark)");
     if (!query) {
-      setTheme("theme-light");
+      if (!readStoredThemeOverride()) setTheme("theme-light");
       return;
     }
-    const update = () => setTheme(query.matches ? "theme-dark" : "theme-light");
-    update();
+    if (!readStoredThemeOverride()) setTheme(query.matches ? "theme-dark" : "theme-light");
+    const update = () => {
+      const nextTheme = query.matches ? "theme-dark" : "theme-light";
+      window.localStorage.removeItem("ifsc-theme");
+      setTheme(nextTheme);
+    };
     query.addEventListener("change", update);
     return () => query.removeEventListener("change", update);
   }, []);
@@ -27,10 +30,6 @@ export function App() {
   useEffect(() => {
     window.localStorage.setItem("ifsc-live-tab", tab);
   }, [tab]);
-
-  useEffect(() => {
-    window.localStorage.setItem("ifsc-theme", theme);
-  }, [theme]);
 
   useEffect(() => {
     if (roundUrl) {
@@ -51,10 +50,16 @@ export function App() {
     setRoundUrlInput("");
   }
 
+  function toggleTheme() {
+    const nextTheme = theme === "theme-dark" ? "theme-light" : "theme-dark";
+    window.localStorage.setItem("ifsc-theme", nextTheme);
+    setTheme(nextTheme);
+  }
+
   return (
     <div className={`app-shell ${theme}`}>
       <form className="link-panel" onSubmit={loadRound}>
-        <button className={`theme-switch link-theme-switch ${theme === "theme-light" ? "on" : ""}`} onClick={() => setTheme(theme === "theme-dark" ? "theme-light" : "theme-dark")} aria-label="Toggle color theme">
+        <button type="button" className={`theme-switch link-theme-switch ${theme === "theme-light" ? "on" : ""}`} onClick={toggleTheme} aria-label="Toggle color theme">
           <span />
           <strong>{theme === "theme-dark" ? "Night" : "Day"}</strong>
         </button>
@@ -118,7 +123,7 @@ function readStoredTab(): Tab {
   return value === "routes" || value === "athletes" || value === "feed" ? value : "routes";
 }
 
-function readStoredTheme(): "theme-dark" | "theme-light" | undefined {
+function readStoredThemeOverride(): "theme-dark" | "theme-light" | undefined {
   if (typeof window === "undefined") return undefined;
   const value = window.localStorage.getItem("ifsc-theme");
   return value === "theme-dark" || value === "theme-light" ? value : undefined;
@@ -126,5 +131,9 @@ function readStoredTheme(): "theme-dark" | "theme-light" | undefined {
 
 function readStoredRoundUrl() {
   if (typeof window === "undefined") return "";
+  if (new URLSearchParams(window.location.search).has("reset")) {
+    window.localStorage.removeItem("ifsc-round-url");
+    return "";
+  }
   return window.localStorage.getItem("ifsc-round-url") ?? "";
 }

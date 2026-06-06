@@ -111,7 +111,7 @@ export class IfscRestRoundSource implements RoundSource {
       response = await fetch(this.endpoint, { headers: this.apiHeaders() });
     }
     if (!response.ok) throw new Error(`IFSC request failed ${response.status}: ${this.endpoint}`);
-    const payload = await response.json() as IfscRoundPayload;
+    const payload = unwrapIfscPayload(await response.json());
     return normalizeIfscPayload(payload, this.endpoint);
   }
 
@@ -198,7 +198,7 @@ export class IfscBrowserRoundSource implements RoundSource {
       if (!response.ok) throw new Error(`Browser IFSC request failed ${response.status}: ${url}`);
       return response.json();
     }, this.endpoint) as IfscRoundPayload;
-    return normalizeIfscPayload(payload, this.endpoint);
+    return normalizeIfscPayload(unwrapIfscPayload(payload), this.endpoint);
   }
 
   sourceName(): "ifsc-network" {
@@ -576,6 +576,23 @@ export function normalizeIfscPayload(payload: IfscRoundPayload, endpoint: string
   };
 }
 
+function unwrapIfscPayload(payload: unknown): IfscRoundPayload {
+  if (isRoundPayload(payload)) return payload;
+  if (payload && typeof payload === "object") {
+    const record = payload as Record<string, unknown>;
+    for (const key of ["data", "category_round", "categoryRound", "result", "round"]) {
+      if (isRoundPayload(record[key])) return record[key];
+    }
+  }
+  throw new Error("Unsupported IFSC payload shape. The round may use a different results endpoint.");
+}
+
+function isRoundPayload(value: unknown): value is IfscRoundPayload {
+  if (!value || typeof value !== "object") return false;
+  const record = value as Partial<IfscRoundPayload>;
+  return Array.isArray(record.ranking) || Array.isArray(record.startlist);
+}
+
 function numberOrFallback(value: number | string | null | undefined, fallback: number) {
   const parsed = Number(value ?? fallback);
   return Number.isFinite(parsed) ? parsed : fallback;
@@ -599,9 +616,8 @@ function displayName(entry: IfscRankingEntry | IfscStartlistEntry) {
 
 function toBoulderResult(ascent: IfscAscent): BoulderResult {
   const status = ascent.status ?? "";
-  const routeNo = Number(ascent.route_name);
   return {
-    boulderNo: Number.isFinite(routeNo) ? routeNo : ascent.route_id,
+    boulderNo: routeNoFromAscent(ascent),
     attemptsToZone: ascent.zone_tries ?? undefined,
     attemptsToTop: ascent.top_tries ?? undefined,
     hasZone: Boolean(ascent.zone),
@@ -623,7 +639,10 @@ function activeBoulderFromAscents(ascents?: IfscAscent[]) {
 
 function routeNoFromAscent(ascent: IfscAscent) {
   const routeNo = Number(ascent.route_name);
-  return Number.isFinite(routeNo) ? routeNo : ascent.route_id;
+  if (Number.isFinite(routeNo)) return routeNo;
+  const embedded = String(ascent.route_name ?? "").match(/\d+/)?.[0];
+  if (embedded) return Number(embedded);
+  return ascent.route_id;
 }
 
 function emptyBouldersFromStartlist(entry?: IfscStartlistEntry): BoulderResult[] {
