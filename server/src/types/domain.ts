@@ -87,6 +87,10 @@ export interface RankingEntry {
 export interface StartlistEntry {
   athleteId: string;
   order: number;
+  routePositions?: {
+    boulderNo: number;
+    position: number;
+  }[];
 }
 
 export interface CompetitionSnapshot {
@@ -96,6 +100,7 @@ export interface CompetitionSnapshot {
   categoryRoundId: string;
   eventName: string;
   roundName: string;
+  roundStatus?: string;
   formatIdentifier?: string;
   athletes: AthleteRoundResult[];
   ranking: RankingEntry[];

@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { RefObject } from "react";
 import type { AthleteRoundResult, CompetitionEvent, CompetitionState } from "../../server/src/types/domain";
-import { athleteById, flag } from "../lib/format";
+import { athleteById } from "../lib/format";
 
 interface Props {
   state: CompetitionState;
@@ -140,10 +140,13 @@ function RouteTile({ state, route, showNext }: { state: CompetitionState; route:
               <strong>{displayRankLabel(result)}</strong>
             </div>
           </div>
-          {showNext && <div className="next-line">Next: {next ? `${flag(next.countryCode)} ${displayName(next.name)}` : "-"}</div>}
+          {showNext && <div className="next-line">Next: {next ? displayName(next.name) : "-"}</div>}
         </>
       ) : (
-        <div className="empty-route">No climber</div>
+        <>
+          <div className="empty-route">No climber</div>
+          {showNext && <div className="next-line">Next: {next ? displayName(next.name) : "-"}</div>}
+        </>
       )}
     </article>
   );
@@ -422,8 +425,46 @@ function routeLabel(state: CompetitionState, group?: string, boulder?: number) {
 }
 
 function nextForRoute(state: CompetitionState, group?: string, boulder?: number) {
+  if (isInactiveRound(state)) return undefined;
+  if (!boulder) return undefined;
+  const activeIds = new Set(state.currentClimbers.map((climber) => climber.athleteId));
+  const routeLive = state.currentClimbers.find((climber) => (climber.startingGroup ?? undefined) === group && climber.currentBoulder === boulder)
+    ?? state.currentClimbers.find((climber) => climber.currentBoulder === boulder);
+  const currentPosition = routeLive ? routePosition(state, routeLive.athleteId, boulder) : undefined;
+  const positionedCandidates = state.snapshot.startlist
+    .map((entry) => {
+      const result = athleteById(state.snapshot.athletes, entry.athleteId);
+      const position = entry.routePositions?.find((item) => item.boulderNo === boulder)?.position;
+      return { entry, result, position };
+    })
+    .filter((candidate) => candidate.result && candidate.position !== undefined)
+    .filter((candidate) => (group ? candidate.result?.startingGroup === group : true))
+    .filter((candidate) => !activeIds.has(candidate.entry.athleteId) && !isDnsResult(candidate.result!))
+    .filter((candidate) => currentPosition === undefined || candidate.position! > currentPosition)
+    .sort((a, b) => a.position! - b.position! || a.result!.athlete.startOrder - b.result!.athlete.startOrder);
+  const positioned = positionedCandidates[0]?.result?.athlete;
+  if (positioned) return positioned;
+
   const match = state.upNext.find((entry) => entry.startingGroup === group && entry.expectedBoulder === boulder) ?? state.upNext.find((entry) => entry.expectedBoulder === boulder);
-  return match ? athleteById(state.snapshot.athletes, match.athleteId)?.athlete : undefined;
+  if (match) return athleteById(state.snapshot.athletes, match.athleteId)?.athlete;
+
+  const currentOrder = routeLive ? athleteById(state.snapshot.athletes, routeLive.athleteId)?.athlete.startOrder : undefined;
+  return state.snapshot.athletes
+    .filter((result) => (group ? result.startingGroup === group : true))
+    .filter((result) => !activeIds.has(result.athlete.id) && !isDnsResult(result))
+    .filter((result) => (result.nextBoulder ?? nextUnfinishedBoulder(result.boulders)) === boulder)
+    .filter((result) => currentOrder === undefined || result.athlete.startOrder > currentOrder)
+    .sort((a, b) => a.athlete.startOrder - b.athlete.startOrder)[0]?.athlete;
+}
+
+function routePosition(state: CompetitionState, athleteId: string, boulder: number) {
+  return state.snapshot.startlist
+    .find((entry) => entry.athleteId === athleteId)
+    ?.routePositions?.find((position) => position.boulderNo === boulder)?.position;
+}
+
+function nextUnfinishedBoulder(boulders: MiniBoulder[]) {
+  return boulders.find((boulder) => !boulder.hasTop)?.boulderNo;
 }
 
 function MiniBoulders({ boulders, currentBoulder, currentAttempt }: { boulders: MiniBoulder[]; currentBoulder?: number; currentAttempt?: number }) {
@@ -432,6 +473,7 @@ function MiniBoulders({ boulders, currentBoulder, currentAttempt }: { boulders: 
       {boulders.map((boulder) => (
         <MiniCell boulder={boulder} current={currentBoulder === boulder.boulderNo} currentAttempt={currentAttempt} key={boulder.boulderNo} />
       ))}
+      {currentAttempt ? <div className="mini-attempt-side blink">{currentAttempt}</div> : null}
     </div>
   );
 }
@@ -492,7 +534,11 @@ function eventTypeClass(event: CompetitionEvent) {
 
 function isSlashedBoulder(boulder: MiniBoulder) {
   if (boulder.hasZone || boulder.hasTop) return false;
-  return /expired|timeout|time|confirmed|complete|done|no score|dns|did not start/i.test(boulder.rawStatus ?? "");
+  return /expired|timeout|time|confirmed|complete|done|no score|no zone|no top|fail|dns|did not start/i.test(boulder.rawStatus ?? "");
+}
+
+function isInactiveRound(state: CompetitionState) {
+  return /finished|complete|closed|archived|ended|not started|not_started|upcoming|scheduled|pending/i.test(state.snapshot.roundStatus ?? "");
 }
 
 function displayName(name: string) {

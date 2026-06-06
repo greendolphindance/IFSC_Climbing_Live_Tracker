@@ -499,6 +499,15 @@ p {
   line-height: 1;
 }
 
+.mini-attempt-side {
+  display: none;
+  color: #35d07f;
+  font-size: 11px;
+  font-weight: 900;
+  line-height: 1;
+  text-align: center;
+}
+
 .cell-half {
   position: absolute;
   left: 0;
@@ -1265,6 +1274,7 @@ pre {
 }
 
 .theme-light .mini-attempt,
+.theme-light .mini-attempt-side,
 .theme-light .ranking-attempt,
 .theme-light .ranking-attempt-side,
 .theme-light .score-block span,
@@ -1696,7 +1706,9 @@ pre {
   .mini-boulders {
     --mini-cell-width: 20px;
     --mini-cell-height: 36px;
+    display: flex;
     gap: 4px;
+    align-items: center;
   }
 
   .mini-cell {
@@ -1704,6 +1716,11 @@ pre {
   }
 
   .mini-attempt {
+    display: none;
+  }
+
+  .mini-attempt-side {
+    display: block;
     font-size: 11px;
   }
 

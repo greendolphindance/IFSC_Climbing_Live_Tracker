@@ -546,15 +546,16 @@ export function normalizeIfscPayload(payload: IfscRoundPayload, endpoint: string
     const ranking = rankingById.get(id);
     const athlete = ranking ? toAthlete(ranking, numberOrFallback(ranking.start_order, startlistAthletes.get(id)?.startOrder ?? 999)) : startlistAthletes.get(id)!;
     const resultStatus = ranking ? rankingStatus(ranking) : undefined;
+    const currentBoulder = ranking?.active ? activeBoulderFromAscents(ranking.ascents) : undefined;
     const boulders = ranking?.ascents?.map(toBoulderResult).sort((a, b) => a.boulderNo - b.boulderNo) ?? emptyBouldersFromStartlist(startlist.find((entry) => String(entry.athlete_id) === id));
     return {
       athlete,
       rank: numberOrFallback(ranking?.rank, 999),
       groupRank: ranking?.group_rank === undefined || ranking?.group_rank === null ? undefined : numberOrFallback(ranking.group_rank, 999),
       startingGroup: ranking?.starting_group ?? undefined,
-      currentBoulder: ranking?.active ? activeBoulderFromAscents(ranking.ascents) : undefined,
+      currentBoulder,
       score: numberOrFallback(ranking?.score, 0),
-      boulders: isDnsStatus(resultStatus) ? boulders.map((boulder) => ({ ...boulder, rawStatus: boulder.rawStatus || "DNS" })) : boulders,
+      boulders: normalizeBoulderStatuses(boulders, resultStatus, currentBoulder),
       sourceStatus: ranking?.active ? "active" : ranking?.under_appeal ? "under_appeal" : resultStatus
     };
   });
@@ -566,6 +567,7 @@ export function normalizeIfscPayload(payload: IfscRoundPayload, endpoint: string
     categoryRoundId: String(payload.id),
     eventName: payload.event ?? "IFSC Boulder Competition",
     roundName: `${payload.category ?? "Category"} ${payload.round ?? "Round"}`,
+    roundStatus: payload.status,
     formatIdentifier: payload.format_identifier,
     athletes,
     ranking: ranking.map((entry) => ({
@@ -619,14 +621,27 @@ function displayName(entry: IfscRankingEntry | IfscStartlistEntry) {
 
 function toBoulderResult(ascent: IfscAscent): BoulderResult {
   const status = ascent.status ?? "";
+  const noScoreStatus = !ascent.top && !ascent.zone && (ascent.points === 0 || ascent.modified) ? "no score" : "";
   return {
     boulderNo: routeNoFromAscent(ascent),
     attemptsToZone: ascent.zone_tries ?? undefined,
     attemptsToTop: ascent.top_tries ?? undefined,
     hasZone: Boolean(ascent.zone),
     hasTop: Boolean(ascent.top),
-    rawStatus: status || (ascent.top ? `T${ascent.top_tries ?? ""}` : ascent.zone ? `Z${ascent.zone_tries ?? ""}` : "")
+    rawStatus: status || (ascent.top ? `T${ascent.top_tries ?? ""}` : ascent.zone ? `Z${ascent.zone_tries ?? ""}` : noScoreStatus)
   };
+}
+
+function normalizeBoulderStatuses(boulders: BoulderResult[], resultStatus: string | undefined, currentBoulder: number | undefined) {
+  if (isDnsStatus(resultStatus)) {
+    return boulders.map((boulder) => ({ ...boulder, rawStatus: boulder.rawStatus || "DNS" }));
+  }
+  return boulders.map((boulder) => {
+    if (currentBoulder === boulder.boulderNo && /no score/i.test(boulder.rawStatus ?? "")) {
+      return { ...boulder, rawStatus: "" };
+    }
+    return boulder;
+  });
 }
 
 function rankingStatus(entry: IfscRankingEntry) {
@@ -665,7 +680,7 @@ function emptyBouldersFromStartlist(entry?: IfscStartlistEntry): BoulderResult[]
 function buildStartlist(startlist: IfscStartlistEntry[], rankingAthletes: Athlete[]): StartlistEntry[] {
   if (startlist.length > 0) {
     return startlist
-      .map((entry) => ({ athleteId: String(entry.athlete_id), order: startOrderFromStartlist(entry) }))
+      .map((entry) => ({ athleteId: String(entry.athlete_id), order: startOrderFromStartlist(entry), routePositions: routePositionsFromStartlist(entry) }))
       .sort((a, b) => a.order - b.order || Number(a.athleteId) - Number(b.athleteId));
   }
   return rankingAthletes.map((athlete) => ({ athleteId: athlete.id, order: athlete.startOrder }));
@@ -674,6 +689,24 @@ function buildStartlist(startlist: IfscStartlistEntry[], rankingAthletes: Athlet
 function startOrderFromStartlist(entry: IfscStartlistEntry) {
   const positions = entry.route_start_positions?.map((position) => position.position) ?? [];
   return Math.min(...positions, 999);
+}
+
+function routePositionsFromStartlist(entry: IfscStartlistEntry) {
+  return entry.route_start_positions
+    ?.map((position) => ({
+      boulderNo: routeNoFromRoutePosition(position),
+      position: position.position
+    }))
+    .filter((position) => Number.isFinite(position.boulderNo) && Number.isFinite(position.position))
+    .sort((a, b) => a.boulderNo - b.boulderNo);
+}
+
+function routeNoFromRoutePosition(position: IfscRoutePosition) {
+  const routeNo = Number(position.route_name);
+  if (Number.isFinite(routeNo)) return routeNo;
+  const embedded = String(position.route_name ?? "").match(/\d+/)?.[0];
+  if (embedded) return Number(embedded);
+  return position.route_id;
 }
 
 function buildAppeals(ranking: IfscRankingEntry[]): Appeal[] {
