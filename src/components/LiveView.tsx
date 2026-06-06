@@ -426,6 +426,7 @@ function routeLabel(state: CompetitionState, group?: string, boulder?: number) {
 
 function nextForRoute(state: CompetitionState, group?: string, boulder?: number) {
   if (isInactiveRound(state)) return undefined;
+  if (!hasCompetitionStarted(state)) return undefined;
   if (!boulder) return undefined;
   const activeIds = new Set(state.currentClimbers.map((climber) => climber.athleteId));
   const routeLive = state.currentClimbers.find((climber) => (climber.startingGroup ?? undefined) === group && climber.currentBoulder === boulder)
@@ -555,6 +556,15 @@ function isInactiveRound(state: CompetitionState) {
 
 function isFinishedRound(state: CompetitionState) {
   return /finished|complete|closed|archived|ended/i.test(state.snapshot.roundStatus ?? "");
+}
+
+function hasCompetitionStarted(state: CompetitionState) {
+  return state.currentClimbers.length > 0 || state.snapshot.athletes.some((result) =>
+    result.sourceStatus === "active"
+    || Boolean(result.currentBoulder)
+    || result.score > 0
+    || result.boulders.some((boulder) => boulder.hasZone || boulder.hasTop || Boolean(boulder.rawStatus))
+  );
 }
 
 function displayName(name: string) {
