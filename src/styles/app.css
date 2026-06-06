@@ -482,7 +482,7 @@ p {
   content: "";
   position: absolute;
   inset: -1px;
-  background: linear-gradient(135deg, transparent 47%, #d6e0ea 48%, #d6e0ea 52%, transparent 53%);
+  background: linear-gradient(135deg, transparent 47%, #ffffff 48%, #ffffff 52%, transparent 53%);
   pointer-events: none;
 }
 
@@ -1278,7 +1278,7 @@ pre {
 
 .theme-light .mini-cell.expired::after,
 .theme-light .ranking-cell.expired::after {
-  background: linear-gradient(135deg, transparent 47%, #2a3542 48%, #2a3542 52%, transparent 53%);
+  background: linear-gradient(135deg, transparent 47%, #000000 48%, #000000 52%, transparent 53%);
 }
 
 .theme-light .ranking-row {

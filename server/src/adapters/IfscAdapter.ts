@@ -64,6 +64,7 @@ interface IfscRankingEntry {
   lastname?: string;
   country: string;
   bib?: string;
+  status?: string | null;
   rank?: number | string | null;
   score?: number | string | null;
   start_order?: number | string | null;
@@ -544,6 +545,8 @@ export function normalizeIfscPayload(payload: IfscRoundPayload, endpoint: string
   const athletes = [...athleteIds].map((id) => {
     const ranking = rankingById.get(id);
     const athlete = ranking ? toAthlete(ranking, numberOrFallback(ranking.start_order, startlistAthletes.get(id)?.startOrder ?? 999)) : startlistAthletes.get(id)!;
+    const resultStatus = ranking ? rankingStatus(ranking) : undefined;
+    const boulders = ranking?.ascents?.map(toBoulderResult).sort((a, b) => a.boulderNo - b.boulderNo) ?? emptyBouldersFromStartlist(startlist.find((entry) => String(entry.athlete_id) === id));
     return {
       athlete,
       rank: numberOrFallback(ranking?.rank, 999),
@@ -551,8 +554,8 @@ export function normalizeIfscPayload(payload: IfscRoundPayload, endpoint: string
       startingGroup: ranking?.starting_group ?? undefined,
       currentBoulder: ranking?.active ? activeBoulderFromAscents(ranking.ascents) : undefined,
       score: numberOrFallback(ranking?.score, 0),
-      boulders: ranking?.ascents?.map(toBoulderResult).sort((a, b) => a.boulderNo - b.boulderNo) ?? emptyBouldersFromStartlist(startlist.find((entry) => String(entry.athlete_id) === id)),
-      sourceStatus: ranking?.active ? "active" : ranking?.under_appeal ? "under_appeal" : undefined
+      boulders: isDnsStatus(resultStatus) ? boulders.map((boulder) => ({ ...boulder, rawStatus: boulder.rawStatus || "DNS" })) : boulders,
+      sourceStatus: ranking?.active ? "active" : ranking?.under_appeal ? "under_appeal" : resultStatus
     };
   });
 
@@ -624,6 +627,15 @@ function toBoulderResult(ascent: IfscAscent): BoulderResult {
     hasTop: Boolean(ascent.top),
     rawStatus: status || (ascent.top ? `T${ascent.top_tries ?? ""}` : ascent.zone ? `Z${ascent.zone_tries ?? ""}` : "")
   };
+}
+
+function rankingStatus(entry: IfscRankingEntry) {
+  const candidates = [entry.status, entry.rank, entry.score].map((value) => String(value ?? ""));
+  return candidates.find((value) => isDnsStatus(value)) ?? entry.status ?? undefined;
+}
+
+function isDnsStatus(value?: string) {
+  return /\bDNS\b|did not start/i.test(value ?? "");
 }
 
 function activeBoulderFromAscents(ascents?: IfscAscent[]) {

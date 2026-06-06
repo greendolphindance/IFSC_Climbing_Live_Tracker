@@ -136,8 +136,8 @@ function RouteTile({ state, route, showNext }: { state: CompetitionState; route:
           <div className="route-body">
             <MiniBoulders boulders={result.boulders} currentBoulder={live.currentBoulder} currentAttempt={live.currentAttempt} />
             <div className="score-block">
-              <span>{live.score.toFixed(1)}</span>
-              <strong>#{live.groupRank ?? live.rank}</strong>
+              <span>{displayScore(result)}</span>
+              <strong>{displayRankLabel(result)}</strong>
             </div>
           </div>
           {showNext && <div className="next-line">Next: {next ? `${flag(next.countryCode)} ${displayName(next.name)}` : "-"}</div>}
@@ -180,7 +180,7 @@ function RouteSummaryRow({ state, route }: { state: CompetitionState; route: Rou
       {result && live ? (
         <>
           <RankingBoulders boulders={result.boulders} currentBoulder={live.currentBoulder} currentAttempt={live.currentAttempt} />
-          <span className="ranking-score">{live.score.toFixed(1)}</span>
+          <span className="ranking-score">{displayScore(result)}</span>
         </>
       ) : (
         <>
@@ -277,10 +277,10 @@ function RankingPanel({ state, boxed = false, splitGroups = false, compactWidth 
                 const live = state.currentClimbers.find((climber) => climber.athleteId === result.athlete.id);
                 return (
                   <div className={`ranking-row ${boxed ? "ranking-card" : ""} ${active ? "active-ranking" : ""}`} key={result.athlete.id}>
-                    <strong>#{displayRank(result)}</strong>
+                    <strong>{displayRankLabel(result)}</strong>
                     <span className="ranking-name">{displayName(result.athlete.name)}</span>
                     <RankingBoulders boulders={result.boulders} currentBoulder={live?.currentBoulder} currentAttempt={live?.currentAttempt} />
-                    <span className="ranking-score">{result.score.toFixed(1)}</span>
+                    <span className="ranking-score">{displayScore(result)}</span>
                   </div>
                 );
               })}
@@ -457,7 +457,7 @@ interface MiniBoulder {
 }
 
 function MiniCell({ boulder, current, currentAttempt, small = false }: { boulder: MiniBoulder; current?: boolean; currentAttempt?: number; small?: boolean }) {
-  const className = `${small ? "ranking-cell" : "mini-cell"} ${boulder.hasTop ? "top" : boulder.hasZone ? "zone" : ""} ${isExpired(boulder.rawStatus) ? "expired" : ""} ${current ? "current" : ""}`;
+  const className = `${small ? "ranking-cell" : "mini-cell"} ${boulder.hasTop ? "top" : boulder.hasZone ? "zone" : ""} ${isSlashedBoulder(boulder) ? "expired" : ""} ${current ? "current" : ""}`;
   return (
     <div className={small ? "ranking-wrap" : "mini-wrap"}>
       <div className={className}>
@@ -490,8 +490,9 @@ function eventTypeClass(event: CompetitionEvent) {
   return "event-default";
 }
 
-function isExpired(rawStatus?: string) {
-  return /expired|timeout|time/i.test(rawStatus ?? "");
+function isSlashedBoulder(boulder: MiniBoulder) {
+  if (boulder.hasZone || boulder.hasTop) return false;
+  return /expired|timeout|time|confirmed|complete|done|no score|dns|did not start/i.test(boulder.rawStatus ?? "");
 }
 
 function displayName(name: string) {
@@ -503,6 +504,19 @@ function displayName(name: string) {
 function displayRank(result: AthleteRoundResult) {
   const rank = result.groupRank ?? result.rank;
   return rank >= 999 ? result.athlete.startOrder : rank;
+}
+
+function displayRankLabel(result: AthleteRoundResult) {
+  if (isDnsResult(result)) return "";
+  return `#${displayRank(result)}`;
+}
+
+function displayScore(result: AthleteRoundResult) {
+  return isDnsResult(result) ? "DNS" : result.score.toFixed(1);
+}
+
+function isDnsResult(result: AthleteRoundResult) {
+  return /\bDNS\b|did not start/i.test(result.sourceStatus ?? "");
 }
 
 function shortGroupLabel(name: string) {
