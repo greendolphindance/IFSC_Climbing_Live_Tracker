@@ -431,7 +431,7 @@ function nextForRoute(state: CompetitionState, group?: string, boulder?: number)
   const activeIds = new Set(state.currentClimbers.map((climber) => climber.athleteId));
   const routeLive = state.currentClimbers.find((climber) => (climber.startingGroup ?? undefined) === group && climber.currentBoulder === boulder)
     ?? state.currentClimbers.find((climber) => climber.currentBoulder === boulder);
-  const currentPosition = routeLive ? routePosition(state, routeLive.athleteId, boulder) : undefined;
+  const currentPosition = routeLive ? routePosition(state, routeLive.athleteId, boulder) : completedRoutePosition(state, group, boulder);
   const positionedCandidates = state.snapshot.startlist
     .map((entry) => {
       const result = athleteById(state.snapshot.athletes, entry.athleteId);
@@ -449,7 +449,7 @@ function nextForRoute(state: CompetitionState, group?: string, boulder?: number)
   const match = state.upNext.find((entry) => entry.startingGroup === group && entry.expectedBoulder === boulder) ?? state.upNext.find((entry) => entry.expectedBoulder === boulder);
   if (match) return athleteById(state.snapshot.athletes, match.athleteId)?.athlete;
 
-  const currentOrder = routeLive ? athleteById(state.snapshot.athletes, routeLive.athleteId)?.athlete.startOrder : undefined;
+  const currentOrder = routeLive ? athleteById(state.snapshot.athletes, routeLive.athleteId)?.athlete.startOrder : completedRouteOrder(state, group, boulder);
   return state.snapshot.athletes
     .filter((result) => (group ? result.startingGroup === group : true))
     .filter((result) => !activeIds.has(result.athlete.id) && !isDnsResult(result))
@@ -462,6 +462,28 @@ function routePosition(state: CompetitionState, athleteId: string, boulder: numb
   return state.snapshot.startlist
     .find((entry) => entry.athleteId === athleteId)
     ?.routePositions?.find((position) => position.boulderNo === boulder)?.position;
+}
+
+function completedRoutePosition(state: CompetitionState, group: string | undefined, boulder: number) {
+  const positions = state.snapshot.athletes
+    .filter((result) => (group ? result.startingGroup === group : true))
+    .filter((result) => hasRouteResult(result, boulder))
+    .map((result) => routePosition(state, result.athlete.id, boulder))
+    .filter((position): position is number => Number.isFinite(position));
+  return positions.length > 0 ? Math.max(...positions) : undefined;
+}
+
+function completedRouteOrder(state: CompetitionState, group: string | undefined, boulder: number) {
+  const orders = state.snapshot.athletes
+    .filter((result) => (group ? result.startingGroup === group : true))
+    .filter((result) => hasRouteResult(result, boulder))
+    .map((result) => result.athlete.startOrder);
+  return orders.length > 0 ? Math.max(...orders) : undefined;
+}
+
+function hasRouteResult(result: AthleteRoundResult, boulder: number) {
+  const route = result.boulders.find((item) => item.boulderNo === boulder);
+  return Boolean(route && (route.hasZone || route.hasTop || isSlashedBoulder(route)));
 }
 
 function nextUnfinishedBoulder(boulders: MiniBoulder[]) {
