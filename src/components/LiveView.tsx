@@ -261,13 +261,26 @@ function RankingPanel({ state, boxed = false, splitGroups = false, compactWidth 
 
 function EventFeed({ events, athletes }: { events: CompetitionEvent[]; athletes: AthleteRoundResult[] }) {
   const feedRef = useRef<HTMLDivElement>(null);
+  const scrollKey = `ifsc-event-feed-scroll:${athletes.map((result) => result.athlete.id).join("-")}`;
+  const restoredRef = useRef(false);
+
+  useEffect(() => {
+    if (restoredRef.current || !feedRef.current) return;
+    restoredRef.current = true;
+    const stored = Number(window.localStorage.getItem(scrollKey) ?? 0);
+    if (Number.isFinite(stored)) feedRef.current.scrollTop = stored;
+  }, [scrollKey, events.length]);
+
   return (
     <section className="panel">
       <div className="section-title event-feed-title">
         <span>Event Feed</span>
-        <button type="button" className="feed-top-button" aria-label="Scroll event feed to newest event" onClick={() => feedRef.current?.scrollTo({ top: 0, behavior: "smooth" })}>↑</button>
+        <button type="button" className="feed-top-button" aria-label="Scroll event feed to newest event" onClick={() => {
+          feedRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+          window.localStorage.setItem(scrollKey, "0");
+        }}>↑</button>
       </div>
-      <div className="event-list scrollable-feed" ref={feedRef}>
+      <div className="event-list scrollable-feed" ref={feedRef} onScroll={(event) => window.localStorage.setItem(scrollKey, String(event.currentTarget.scrollTop))}>
         {events.length === 0 ? <div className="empty compact-empty">No competition events in this session.</div> : events.map((event) => (
           <div className={`event-row ${eventTypeClass(event)}`} key={event.id}>
             <time>{new Date(event.timestamp).toLocaleTimeString()}</time>

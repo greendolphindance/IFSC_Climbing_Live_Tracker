@@ -45,6 +45,12 @@ export function App() {
     setRoundUrl(roundUrlInput.trim());
   }
 
+  function resetRound() {
+    window.localStorage.removeItem("ifsc-round-url");
+    setRoundUrl("");
+    setRoundUrlInput("");
+  }
+
   return (
     <div className={`app-shell ${theme}`}>
       <form className="link-panel" onSubmit={loadRound}>
@@ -86,9 +92,17 @@ export function App() {
           {tab === "feed" && <LiveView state={state} mode="feed" />}
         </>
       ) : (
-        <div className="panel loading-panel">Connecting to competition state...</div>
+        <section className={`panel ${error ? "error-panel" : "loading-panel"}`}>
+          <div className="section-title">{error ? "Unable to Load Competition" : "Connecting to competition state..."}</div>
+          {error && <p>{error}</p>}
+          {error && (
+            <div className="error-actions">
+              <button type="button" onClick={resetRound}>Back to default round</button>
+              <button type="button" onClick={() => setRoundUrl(roundUrlInput.trim())}>Retry</button>
+            </div>
+          )}
+        </section>
       )}
-      {!state && error && <div className="connection-error">{error}</div>}
     </div>
   );
 }

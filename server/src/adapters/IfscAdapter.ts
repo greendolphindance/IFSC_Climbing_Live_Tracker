@@ -83,8 +83,8 @@ interface IfscRoundPayload {
   category: string;
   round: string;
   format_identifier?: string;
-  ranking: IfscRankingEntry[];
-  startlist: IfscStartlistEntry[];
+  ranking?: IfscRankingEntry[];
+  startlist?: IfscStartlistEntry[];
 }
 
 export class IfscRestRoundSource implements RoundSource {
@@ -534,22 +534,24 @@ async function gotoWithRetry(page: { goto: (url: string, options: { waitUntil: "
 
 export function normalizeIfscPayload(payload: IfscRoundPayload, endpoint: string): CompetitionSnapshot {
   const receivedAt = new Date().toISOString();
-  const startlistAthletes = new Map(payload.startlist.map((entry) => [String(entry.athlete_id), toAthlete(entry, startOrderFromStartlist(entry))]));
-  const rankingAthletes = payload.ranking.map((entry) => toAthlete(entry, Number(entry.start_order ?? startlistAthletes.get(String(entry.athlete_id))?.startOrder ?? 999)));
-  const athleteIds = new Set([...payload.ranking.map((entry) => String(entry.athlete_id)), ...payload.startlist.map((entry) => String(entry.athlete_id))]);
+  const ranking = payload.ranking ?? [];
+  const startlist = payload.startlist ?? [];
+  const startlistAthletes = new Map(startlist.map((entry) => [String(entry.athlete_id), toAthlete(entry, startOrderFromStartlist(entry))]));
+  const rankingAthletes = ranking.map((entry) => toAthlete(entry, numberOrFallback(entry.start_order, startlistAthletes.get(String(entry.athlete_id))?.startOrder ?? 999)));
+  const athleteIds = new Set([...ranking.map((entry) => String(entry.athlete_id)), ...startlist.map((entry) => String(entry.athlete_id))]);
 
-  const rankingById = new Map(payload.ranking.map((entry) => [String(entry.athlete_id), entry]));
+  const rankingById = new Map(ranking.map((entry) => [String(entry.athlete_id), entry]));
   const athletes = [...athleteIds].map((id) => {
     const ranking = rankingById.get(id);
-    const athlete = ranking ? toAthlete(ranking, Number(ranking.start_order ?? startlistAthletes.get(id)?.startOrder ?? 999)) : startlistAthletes.get(id)!;
+    const athlete = ranking ? toAthlete(ranking, numberOrFallback(ranking.start_order, startlistAthletes.get(id)?.startOrder ?? 999)) : startlistAthletes.get(id)!;
     return {
       athlete,
-      rank: Number(ranking?.rank ?? 999),
-      groupRank: ranking?.group_rank === undefined || ranking?.group_rank === null ? undefined : Number(ranking.group_rank),
+      rank: numberOrFallback(ranking?.rank, 999),
+      groupRank: ranking?.group_rank === undefined || ranking?.group_rank === null ? undefined : numberOrFallback(ranking.group_rank, 999),
       startingGroup: ranking?.starting_group ?? undefined,
       currentBoulder: ranking?.active ? activeBoulderFromAscents(ranking.ascents) : undefined,
-      score: Number(ranking?.score ?? 0),
-      boulders: ranking?.ascents?.map(toBoulderResult).sort((a, b) => a.boulderNo - b.boulderNo) ?? emptyBouldersFromStartlist(payload.startlist.find((entry) => String(entry.athlete_id) === id)),
+      score: numberOrFallback(ranking?.score, 0),
+      boulders: ranking?.ascents?.map(toBoulderResult).sort((a, b) => a.boulderNo - b.boulderNo) ?? emptyBouldersFromStartlist(startlist.find((entry) => String(entry.athlete_id) === id)),
       sourceStatus: ranking?.active ? "active" : ranking?.under_appeal ? "under_appeal" : undefined
     };
   });
@@ -559,19 +561,24 @@ export function normalizeIfscPayload(payload: IfscRoundPayload, endpoint: string
     receivedAt,
     eventId: String(payload.event_id),
     categoryRoundId: String(payload.id),
-    eventName: payload.event,
-    roundName: `${payload.category} ${payload.round}`,
+    eventName: payload.event ?? "IFSC Boulder Competition",
+    roundName: `${payload.category ?? "Category"} ${payload.round ?? "Round"}`,
     formatIdentifier: payload.format_identifier,
     athletes,
-    ranking: payload.ranking.map((entry) => ({
+    ranking: ranking.map((entry) => ({
       athleteId: String(entry.athlete_id),
-      rank: Number(entry.rank ?? 999),
-      score: Number(entry.score ?? 0)
+      rank: numberOrFallback(entry.rank, 999),
+      score: numberOrFallback(entry.score, 0)
     })),
-    startlist: buildStartlist(payload.startlist, rankingAthletes),
-    appeals: buildAppeals(payload.ranking),
+    startlist: buildStartlist(startlist, rankingAthletes),
+    appeals: buildAppeals(ranking),
     rawRef: endpoint
   };
+}
+
+function numberOrFallback(value: number | string | null | undefined, fallback: number) {
+  const parsed = Number(value ?? fallback);
+  return Number.isFinite(parsed) ? parsed : fallback;
 }
 
 function toAthlete(entry: IfscRankingEntry | IfscStartlistEntry, startOrder: number): Athlete {

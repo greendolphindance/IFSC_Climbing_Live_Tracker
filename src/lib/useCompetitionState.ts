@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { CompetitionState } from "../../server/src/types/domain";
+import type { CompetitionEvent, CompetitionState } from "../../server/src/types/domain";
 
 export function useCompetitionState(roundUrl: string) {
   const [state, setState] = useState<CompetitionState | null>(null);
@@ -20,7 +20,8 @@ export function useCompetitionState(roundUrl: string) {
           setError(payload.error);
           return;
         }
-        setState(payload);
+        const stateWithHistory = mergePersistedEvents(payload as CompetitionState, eventStorageKey(roundUrl));
+        setState(stateWithHistory);
         setError(null);
       } catch (err: unknown) {
         if (!cancelled) setError(err instanceof Error ? err.message : "Failed to fetch state");
@@ -46,4 +47,31 @@ export function useCompetitionState(roundUrl: string) {
   }, [roundUrl]);
 
   return { state, error };
+}
+
+function mergePersistedEvents(state: CompetitionState, key: string): CompetitionState {
+  const persisted = readPersistedEvents(key);
+  const seen = new Set<string>();
+  const events = [...state.events, ...persisted].filter((event) => {
+    if (seen.has(event.id)) return false;
+    seen.add(event.id);
+    return true;
+  }).slice(0, 500);
+  window.localStorage.setItem(key, JSON.stringify(events));
+  return { ...state, events };
+}
+
+function readPersistedEvents(key: string): CompetitionEvent[] {
+  try {
+    const value = window.localStorage.getItem(key);
+    if (!value) return [];
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function eventStorageKey(roundUrl: string) {
+  return `ifsc-event-feed:${roundUrl || "__default__"}`;
 }

@@ -25,6 +25,9 @@ function readRoundUrl(request: { query?: { roundUrl?: string | string[] } }) {
   const value = request.query?.roundUrl;
   const roundUrl = Array.isArray(value) ? value[0] : value;
   if (!roundUrl) return undefined;
+  if (roundUrl === "https://ifsc.results.info/event/0/cr/0") {
+    throw new Error("Demo error: this simulates a failed competition link.");
+  }
   if (!/^https:\/\/ifsc\.results\.info\/event\/\d+\/cr\/\d+\/?$/.test(roundUrl)) {
     throw new Error("Unsupported IFSC round URL. Use a URL like https://ifsc.results.info/event/1480/cr/10677");
   }

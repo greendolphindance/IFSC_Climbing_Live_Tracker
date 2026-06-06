@@ -133,6 +133,32 @@ p {
   color: #ffb86b;
 }
 
+.error-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.error-panel p {
+  color: #ffb86b;
+}
+
+.error-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.error-actions button {
+  height: 32px;
+  border: 1px solid #3b84b6;
+  border-radius: 6px;
+  background: #143047;
+  color: #ffffff;
+  cursor: pointer;
+  font-weight: 900;
+  padding: 0 12px;
+}
+
 .theme-toggle {
   border: 1px solid #2a3a4c;
   border-radius: 6px;
