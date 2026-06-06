@@ -134,7 +134,7 @@ function RouteTile({ state, route, showNext }: { state: CompetitionState; route:
       {result && live ? (
         <>
           <div className="route-body">
-            <MiniBoulders boulders={result.boulders} currentBoulder={live.currentBoulder} currentAttempt={live.currentAttempt} />
+            <MiniBoulders boulders={result.boulders} currentBoulder={live.currentBoulder} currentAttempt={live.currentAttempt} roundFinished={isFinishedRound(state)} />
             <div className="score-block">
               <span>{displayScore(result)}</span>
               <strong>{displayRankLabel(result)}</strong>
@@ -182,7 +182,7 @@ function RouteSummaryRow({ state, route }: { state: CompetitionState; route: Rou
       <span className="ranking-name">{result ? displayName(result.athlete.name) : "Open"}</span>
       {result && live ? (
         <>
-          <RankingBoulders boulders={result.boulders} currentBoulder={live.currentBoulder} currentAttempt={live.currentAttempt} />
+          <RankingBoulders boulders={result.boulders} currentBoulder={live.currentBoulder} currentAttempt={live.currentAttempt} roundFinished={isFinishedRound(state)} />
           <span className="ranking-score">{displayScore(result)}</span>
         </>
       ) : (
@@ -282,7 +282,7 @@ function RankingPanel({ state, boxed = false, splitGroups = false, compactWidth 
                   <div className={`ranking-row ${boxed ? "ranking-card" : ""} ${active ? "active-ranking" : ""}`} key={result.athlete.id}>
                     <strong>{displayRankLabel(result)}</strong>
                     <span className="ranking-name">{displayName(result.athlete.name)}</span>
-                    <RankingBoulders boulders={result.boulders} currentBoulder={live?.currentBoulder} currentAttempt={live?.currentAttempt} />
+                    <RankingBoulders boulders={result.boulders} currentBoulder={live?.currentBoulder} currentAttempt={live?.currentAttempt} roundFinished={isFinishedRound(state)} />
                     <span className="ranking-score">{displayScore(result)}</span>
                   </div>
                 );
@@ -467,22 +467,24 @@ function nextUnfinishedBoulder(boulders: MiniBoulder[]) {
   return boulders.find((boulder) => !boulder.hasTop)?.boulderNo;
 }
 
-function MiniBoulders({ boulders, currentBoulder, currentAttempt }: { boulders: MiniBoulder[]; currentBoulder?: number; currentAttempt?: number }) {
+function MiniBoulders({ boulders, currentBoulder, currentAttempt, roundFinished = false }: { boulders: MiniBoulder[]; currentBoulder?: number; currentAttempt?: number; roundFinished?: boolean }) {
+  const slashedBoulders = inferNoScoreBoulders(boulders, currentBoulder, roundFinished);
   return (
     <div className="mini-boulders" style={{ gridTemplateColumns: `repeat(${boulders.length}, var(--mini-cell-width, 20px))` }}>
       {boulders.map((boulder) => (
-        <MiniCell boulder={boulder} current={currentBoulder === boulder.boulderNo} currentAttempt={currentAttempt} key={boulder.boulderNo} />
+        <MiniCell boulder={boulder} current={currentBoulder === boulder.boulderNo} currentAttempt={currentAttempt} inferredNoScore={slashedBoulders.has(boulder.boulderNo)} key={boulder.boulderNo} />
       ))}
       {currentAttempt ? <div className="mini-attempt-side blink">{currentAttempt}</div> : null}
     </div>
   );
 }
 
-function RankingBoulders({ boulders, currentBoulder, currentAttempt }: { boulders: MiniBoulder[]; currentBoulder?: number; currentAttempt?: number }) {
+function RankingBoulders({ boulders, currentBoulder, currentAttempt, roundFinished = false }: { boulders: MiniBoulder[]; currentBoulder?: number; currentAttempt?: number; roundFinished?: boolean }) {
+  const slashedBoulders = inferNoScoreBoulders(boulders, currentBoulder, roundFinished);
   return (
     <div className="ranking-boulders">
       {boulders.map((boulder) => (
-        <MiniCell boulder={boulder} current={currentBoulder === boulder.boulderNo} small key={boulder.boulderNo} />
+        <MiniCell boulder={boulder} current={currentBoulder === boulder.boulderNo} inferredNoScore={slashedBoulders.has(boulder.boulderNo)} small key={boulder.boulderNo} />
       ))}
       {currentAttempt ? <div className="ranking-attempt-side blink">{currentAttempt}</div> : null}
     </div>
@@ -498,8 +500,8 @@ interface MiniBoulder {
   rawStatus?: string;
 }
 
-function MiniCell({ boulder, current, currentAttempt, small = false }: { boulder: MiniBoulder; current?: boolean; currentAttempt?: number; small?: boolean }) {
-  const className = `${small ? "ranking-cell" : "mini-cell"} ${boulder.hasTop ? "top" : boulder.hasZone ? "zone" : ""} ${isSlashedBoulder(boulder) ? "expired" : ""} ${current ? "current" : ""}`;
+function MiniCell({ boulder, current, currentAttempt, small = false, inferredNoScore = false }: { boulder: MiniBoulder; current?: boolean; currentAttempt?: number; small?: boolean; inferredNoScore?: boolean }) {
+  const className = `${small ? "ranking-cell" : "mini-cell"} ${boulder.hasTop ? "top" : boulder.hasZone ? "zone" : ""} ${isSlashedBoulder(boulder) || inferredNoScore ? "expired" : ""} ${current ? "current" : ""}`;
   return (
     <div className={small ? "ranking-wrap" : "mini-wrap"}>
       <div className={className}>
@@ -537,8 +539,22 @@ function isSlashedBoulder(boulder: MiniBoulder) {
   return /expired|timeout|time|confirmed|complete|done|no score|no zone|no top|fail|dns|did not start/i.test(boulder.rawStatus ?? "");
 }
 
+function inferNoScoreBoulders(boulders: MiniBoulder[], currentBoulder: number | undefined, roundFinished: boolean) {
+  const latestProgress = Math.max(0, ...boulders.filter((boulder) => boulder.hasZone || boulder.hasTop).map((boulder) => boulder.boulderNo));
+  const completedBefore = currentBoulder ?? latestProgress;
+  return new Set(boulders
+    .filter((boulder) => boulder.boulderNo !== currentBoulder)
+    .filter((boulder) => !boulder.hasZone && !boulder.hasTop)
+    .filter((boulder) => roundFinished || boulder.boulderNo < completedBefore || isSlashedBoulder(boulder))
+    .map((boulder) => boulder.boulderNo));
+}
+
 function isInactiveRound(state: CompetitionState) {
   return /finished|complete|closed|archived|ended|not started|not_started|upcoming|scheduled|pending/i.test(state.snapshot.roundStatus ?? "");
+}
+
+function isFinishedRound(state: CompetitionState) {
+  return /finished|complete|closed|archived|ended/i.test(state.snapshot.roundStatus ?? "");
 }
 
 function displayName(name: string) {
