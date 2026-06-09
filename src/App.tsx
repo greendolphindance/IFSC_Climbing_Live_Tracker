@@ -1,8 +1,9 @@
 import { useEffect, useState, type FormEvent } from "react";
+import { LeadView } from "./components/LeadView";
 import { LiveView } from "./components/LiveView";
 import { useCompetitionState } from "./lib/useCompetitionState";
 
-type Tab = "routes" | "athletes" | "feed";
+type Tab = "routes" | "athletes" | "feed" | "columns" | "axis";
 
 export function App() {
   const [tab, setTab] = useState<Tab>(() => readStoredTab());
@@ -10,6 +11,7 @@ export function App() {
   const [roundUrl, setRoundUrl] = useState(() => readStoredRoundUrl());
   const [roundUrlInput, setRoundUrlInput] = useState(() => readStoredRoundUrl());
   const { state, error } = useCompetitionState(roundUrl);
+  const discipline = state?.snapshot.discipline ?? "boulder";
 
   useEffect(() => {
     const query = window.matchMedia?.("(prefers-color-scheme: dark)");
@@ -32,10 +34,16 @@ export function App() {
   }, [tab]);
 
   useEffect(() => {
+    if (!state) return;
+    if (discipline === "lead" && (tab === "routes" || tab === "athletes")) setTab("columns");
+    if (discipline !== "lead" && (tab === "columns" || tab === "axis")) setTab("routes");
+  }, [discipline, state, tab]);
+
+  useEffect(() => {
     if (roundUrl) {
-      window.localStorage.setItem("ifsc-round-url", roundUrl);
+      window.sessionStorage.setItem("ifsc-round-url", roundUrl);
     } else {
-      window.localStorage.removeItem("ifsc-round-url");
+      window.sessionStorage.removeItem("ifsc-round-url");
     }
   }, [roundUrl]);
 
@@ -45,7 +53,7 @@ export function App() {
   }
 
   function resetRound() {
-    window.localStorage.removeItem("ifsc-round-url");
+    window.sessionStorage.removeItem("ifsc-round-url");
     setRoundUrl("");
     setRoundUrlInput("");
   }
@@ -65,7 +73,7 @@ export function App() {
         </button>
         <label htmlFor="round-url">Find a competition page at <a href="https://ifsc.results.info" target="_blank" rel="noreferrer">https://ifsc.results.info</a></label>
         <div className="round-url-row">
-          <input id="round-url" type="url" value={roundUrlInput} onChange={(event) => setRoundUrlInput(event.target.value)} placeholder="Paste IFSC round URL, e.g. https://ifsc.results.info/event/1480/cr/10385" />
+          <input id="round-url" type="text" value={roundUrlInput} onChange={(event) => setRoundUrlInput(event.target.value)} placeholder="Paste IFSC round URL, e.g. https://ifsc.results.info/event/1515/cr/10704" />
           <button type="submit">Load</button>
         </div>
       </form>
@@ -76,7 +84,7 @@ export function App() {
             <div>
               <div className="eyebrow">LIVE COMPETITION STATUS</div>
               <h1>{state.snapshot.eventName}</h1>
-              <p>{state.snapshot.roundName} · Event {state.snapshot.eventId} / CR {state.snapshot.categoryRoundId}</p>
+              <p><span className="discipline-label">{discipline === "lead" ? "Lead" : "Boulder"}</span> · {state.snapshot.roundName} · Event {state.snapshot.eventId} / CR {state.snapshot.categoryRoundId}</p>
             </div>
             <div className="status-cluster">
               <span className={`status-dot ${state.connection.status}`} />
@@ -87,13 +95,23 @@ export function App() {
           </header>
 
           <nav className="tabs">
-            <button className={tab === "routes" ? "active" : ""} onClick={() => setTab("routes")}>Routes</button>
-            <button className={tab === "athletes" ? "active" : ""} onClick={() => setTab("athletes")}>Athletes</button>
+            {discipline === "lead" ? (
+              <>
+                <button className={tab === "columns" ? "active" : ""} onClick={() => setTab("columns")}>Columns</button>
+                <button className={tab === "axis" ? "active" : ""} onClick={() => setTab("axis")}>Axis</button>
+              </>
+            ) : (
+              <>
+                <button className={tab === "routes" ? "active" : ""} onClick={() => setTab("routes")}>Routes</button>
+                <button className={tab === "athletes" ? "active" : ""} onClick={() => setTab("athletes")}>Athletes</button>
+              </>
+            )}
             <button className={`feed-tab ${tab === "feed" ? "active" : ""}`} onClick={() => setTab("feed")}>Event Feed</button>
           </nav>
 
-          {tab === "routes" && <LiveView state={state} mode="routes" />}
-          {tab === "athletes" && <LiveView state={state} mode="athletes" />}
+          {discipline === "lead" && tab !== "feed" && <LeadView state={state} mode={tab === "axis" ? "axis" : "columns"} />}
+          {discipline !== "lead" && tab === "routes" && <LiveView state={state} mode="routes" />}
+          {discipline !== "lead" && tab === "athletes" && <LiveView state={state} mode="athletes" />}
           {tab === "feed" && <LiveView state={state} mode="feed" />}
         </>
       ) : (
@@ -120,7 +138,7 @@ function systemTheme(): "theme-dark" | "theme-light" {
 function readStoredTab(): Tab {
   if (typeof window === "undefined") return "routes";
   const value = window.localStorage.getItem("ifsc-live-tab");
-  return value === "routes" || value === "athletes" || value === "feed" ? value : "routes";
+  return value === "routes" || value === "athletes" || value === "feed" || value === "columns" || value === "axis" ? value : "routes";
 }
 
 function readStoredThemeOverride(): "theme-dark" | "theme-light" | undefined {
@@ -132,8 +150,8 @@ function readStoredThemeOverride(): "theme-dark" | "theme-light" | undefined {
 function readStoredRoundUrl() {
   if (typeof window === "undefined") return "";
   if (new URLSearchParams(window.location.search).has("reset")) {
-    window.localStorage.removeItem("ifsc-round-url");
+    window.sessionStorage.removeItem("ifsc-round-url");
     return "";
   }
-  return window.localStorage.getItem("ifsc-round-url") ?? "";
+  return window.sessionStorage.getItem("ifsc-round-url") ?? "";
 }

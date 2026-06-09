@@ -7,6 +7,7 @@ export function useCompetitionState(roundUrl: string) {
 
   useEffect(() => {
     let cancelled = false;
+    const storageKey = eventStorageKey(roundUrl);
     setState(null);
     setError(null);
 
@@ -20,7 +21,7 @@ export function useCompetitionState(roundUrl: string) {
           setError(payload.error);
           return;
         }
-        const stateWithHistory = mergePersistedEvents(payload as CompetitionState, eventStorageKey(roundUrl));
+        const stateWithHistory = mergePersistedEvents(payload as CompetitionState, storageKey);
         setState(stateWithHistory);
         setError(null);
       } catch (err: unknown) {
@@ -33,7 +34,7 @@ export function useCompetitionState(roundUrl: string) {
     const localDev = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
     const events = localDev && !roundUrl ? new EventSource("/events") : undefined;
     events?.addEventListener("state", (event) => {
-      setState(JSON.parse((event as MessageEvent).data));
+      setState(mergePersistedEvents(JSON.parse((event as MessageEvent).data) as CompetitionState, storageKey));
       setError(null);
     });
     events?.addEventListener("error", () => {
@@ -50,15 +51,32 @@ export function useCompetitionState(roundUrl: string) {
 }
 
 function mergePersistedEvents(state: CompetitionState, key: string): CompetitionState {
+  const stateEvents = state.events.filter((event) => event.type !== "SNAPSHOT_RECEIVED");
+  if (isInactiveInitialEventSet(stateEvents)) {
+    window.localStorage.setItem(key, JSON.stringify(stateEvents));
+    return { ...state, events: [state.events.find((event) => event.type === "SNAPSHOT_RECEIVED"), ...stateEvents].filter(Boolean) as CompetitionEvent[] };
+  }
   const persisted = readPersistedEvents(key);
   const seen = new Set<string>();
   const events = [...state.events, ...persisted].filter((event) => {
-    if (seen.has(event.id)) return false;
-    seen.add(event.id);
+    const key = eventDedupeKey(event);
+    if (seen.has(key)) return false;
+    seen.add(key);
     return true;
   }).slice(0, 500);
   window.localStorage.setItem(key, JSON.stringify(events));
   return { ...state, events };
+}
+
+function isInactiveInitialEventSet(events: CompetitionEvent[]) {
+  return events.length === 1 && (events[0].message === "Competition not started" || events[0].message === "Competition finished");
+}
+
+function eventDedupeKey(event: CompetitionEvent) {
+  if (event.message === "Competition not started" || event.message === "Competition finished") {
+    return `round-status:${event.message}`;
+  }
+  return event.id;
 }
 
 function readPersistedEvents(key: string): CompetitionEvent[] {

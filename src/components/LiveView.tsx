@@ -295,7 +295,7 @@ function RankingPanel({ state, boxed = false, splitGroups = false, compactWidth 
   );
 }
 
-function EventFeed({ events, athletes }: { events: CompetitionEvent[]; athletes: AthleteRoundResult[] }) {
+export function EventFeed({ events, athletes }: { events: CompetitionEvent[]; athletes: AthleteRoundResult[] }) {
   const feedRef = useRef<HTMLDivElement>(null);
   const scrollKey = `ifsc-event-feed-scroll:${athletes.map((result) => result.athlete.id).join("-")}`;
   const restoredRef = useRef(false);
@@ -550,10 +550,10 @@ function eventTypeClass(event: CompetitionEvent) {
     if (Number.isFinite(before) && Number.isFinite(after)) return after < before ? "event-rank-up" : "event-rank-down";
     return "event-default";
   }
+  if (event.reason === "lead-fall") return "event-fall";
   if (event.type.includes("APPEAL")) return "event-appeal";
   if (event.type === "TOP_REACHED") return "event-top";
   if (event.type === "ZONE_REACHED") return "event-zone";
-  if (event.type === "CLIMBER_STARTED" || event.type === "TIME_EXPIRED_ESTIMATED") return "event-start";
   return "event-default";
 }
 

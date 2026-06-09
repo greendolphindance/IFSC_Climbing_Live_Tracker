@@ -1,4 +1,4 @@
-import { createRoundSourceFromEnv, IfscAdapter, IfscRestRoundSource, type RoundSource } from "../server/src/adapters/IfscAdapter.js";
+import { createRoundSourceFromEnv, createRoundSourceFromUrl, IfscAdapter, type RoundSource } from "../server/src/adapters/IfscAdapter.js";
 import { CompetitionStateMachine } from "../server/src/state/CompetitionStateMachine.js";
 
 const runtimes = new Map<string, { adapter: IfscAdapter; machine: CompetitionStateMachine }>();
@@ -28,6 +28,7 @@ function readRoundUrl(request: { query?: { roundUrl?: string | string[] } }) {
   if (roundUrl === "https://ifsc.results.info/event/0/cr/0") {
     throw new Error("Demo error: this simulates a failed competition link.");
   }
+  if (roundUrl === "demo:lead-semifinal" || roundUrl === "demo:lead-final") return roundUrl;
   if (!/^https:\/\/ifsc\.results\.info\/event\/\d+\/cr\/\d+\/?$/.test(roundUrl)) {
     throw new Error("Unsupported IFSC round URL. Use a URL like https://ifsc.results.info/event/1480/cr/10677");
   }
@@ -38,7 +39,7 @@ function runtimeFor(roundUrl: string | undefined) {
   const key = roundUrl ?? "__env__";
   const existing = runtimes.get(key);
   if (existing) return existing;
-  const source: RoundSource = roundUrl ? new IfscRestRoundSource(roundUrl) : createRoundSourceFromEnv();
+  const source: RoundSource = roundUrl ? createRoundSourceFromUrl(roundUrl) : createRoundSourceFromEnv();
   const runtime = {
     adapter: new IfscAdapter(source),
     machine: new CompetitionStateMachine()

@@ -109,6 +109,11 @@ p {
   color: #94a8ba;
 }
 
+.discipline-label {
+  color: #7fd7ff;
+  font-weight: 900;
+}
+
 .status-cluster {
   display: flex;
   align-items: center;
@@ -216,14 +221,14 @@ p {
 
 .tabs {
   display: flex;
-  gap: 8px;
+  gap: 4px;
   margin: 30px 0;
 }
 
 .tabs button {
   border: 1px solid #223449;
   background: #0c121a;
-  color: #b9c8d8;
+  color: #dce8f2;
   padding: 7px 12px;
   border-radius: 6px;
   cursor: pointer;
@@ -306,6 +311,9 @@ p {
 }
 
 .section-title {
+  min-height: 28px;
+  display: flex;
+  align-items: center;
   margin-bottom: 9px;
   color: #d8e8f5;
   font-size: 13px;
@@ -691,8 +699,6 @@ p {
 }
 
 .route-heading {
-  display: flex;
-  align-items: center;
   justify-content: flex-start;
   gap: 8px;
 }
@@ -759,8 +765,6 @@ p {
 }
 
 .ranking-heading {
-  display: flex;
-  align-items: center;
   justify-content: flex-start;
   gap: 24px;
 }
@@ -937,6 +941,9 @@ p {
   grid-template-columns: 92px minmax(0, 1fr);
   gap: 12px;
   align-items: center;
+  position: relative;
+  min-height: 28px;
+  margin-bottom: 9px;
 }
 
 .athlete-side-feed,
@@ -974,17 +981,17 @@ p {
 .athlete-side-feed .feed-top-button {
   position: absolute;
   top: 0;
-  right: 4px;
-  width: 18px;
-  height: 18px;
-  font-size: 11px;
+  right: 0;
+  width: 28px;
+  height: 28px;
+  font-size: 15px;
 }
 
 .feed-top-button {
   grid-column: 2;
   justify-self: start;
-  width: 24px;
-  height: 24px;
+  width: 28px;
+  height: 28px;
   border: 1px solid #3b84b6;
   border-radius: 5px;
   background: #143047;
@@ -1045,7 +1052,7 @@ p {
 }
 
 .event-row.event-appeal span {
-  color: #ff5a66;
+  color: #ffd166;
 }
 
 .event-row.event-top span {
@@ -1057,7 +1064,11 @@ p {
 }
 
 .event-row.event-start span {
-  color: #ffd166;
+  color: #dce8f2;
+}
+
+.event-row.event-fall span {
+  color: #ff6b6b;
 }
 
 .event-row.event-default span {
@@ -1066,6 +1077,332 @@ p {
 
 .event-row strong {
   font-weight: 900;
+}
+
+.lead-layout {
+  display: grid;
+  gap: 36px;
+}
+
+.lead-axis-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr);
+  gap: 36px;
+  align-items: stretch;
+}
+
+.lead-axis-layout > .panel,
+.lead-axis-feed,
+.lead-axis-feed .panel {
+  min-height: 0;
+}
+
+.lead-axis-feed .panel {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.lead-axis-feed .scrollable-feed {
+  flex: 1;
+  min-height: 0;
+  max-height: none;
+}
+
+.lead-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 28px;
+  margin-bottom: 9px;
+}
+
+.lead-columns-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 36%) minmax(0, 64%);
+  gap: 18px;
+  align-items: stretch;
+  min-height: 760px;
+}
+
+.lead-left-column {
+  display: grid;
+  grid-template-rows: 300px minmax(0, 1fr);
+  gap: 18px;
+  min-height: 0;
+}
+
+.lead-column-feed,
+.lead-column-feed .panel {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.lead-column-feed .panel {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.lead-column-feed .scrollable-feed {
+  flex: 1;
+  min-height: 0;
+  max-height: none;
+}
+
+.lead-status-card {
+  min-width: 0;
+  border: 1px solid #2b4962;
+  border-radius: 8px;
+  background: #0b1219;
+  padding: 12px;
+}
+
+.lead-current-card {
+  border-color: #35d07f;
+  animation: active-pulse 1.2s ease-in-out infinite;
+}
+
+.lead-card-title {
+  margin-bottom: 10px;
+  color: #7fd7ff;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.lead-featured {
+  min-height: 168px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+}
+
+.lead-athlete-name {
+  color: #5df0a4;
+  font-size: 28px;
+  font-weight: 900;
+  line-height: 1.1;
+}
+
+.lead-meta,
+.lead-next {
+  color: #8fa2b3;
+  font-size: 15px;
+}
+
+.lead-next {
+  margin-top: 10px;
+}
+
+.lead-score {
+  color: #5df0a4;
+  font-size: 48px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.lead-score-fall {
+  color: #ffcf5c;
+}
+
+.lead-ranking-list {
+  display: grid;
+  gap: 4px;
+}
+
+.lead-ranking-row {
+  height: 34px;
+  display: grid;
+  grid-template-columns: 46px minmax(0, 1fr) max-content 3ch;
+  column-gap: 2ch;
+  row-gap: 8px;
+  align-items: center;
+  border-bottom: 1px solid #172536;
+  color: #dce8f2;
+  padding: 0 24px;
+}
+
+.lead-ranking-row.compact {
+  height: 28px;
+}
+
+.lead-ranking-row strong {
+  color: #9db2c4;
+  text-align: left;
+}
+
+.lead-ranking-row span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 800;
+}
+
+.lead-ranking-row small {
+  color: #ff5a66;
+  font-size: 9px;
+  font-weight: 900;
+  white-space: nowrap;
+  justify-self: end;
+}
+
+.lead-ranking-row b {
+  color: #dce8f2;
+  text-align: right;
+}
+
+.lead-ranking-row.lead-climbing {
+  border: 1px solid #35d07f;
+  border-radius: 6px;
+  animation: active-pulse 1.2s ease-in-out infinite;
+}
+
+.lead-ranking-row.lead-climbing span,
+.lead-ranking-row.lead-climbing b {
+  color: #5df0a4;
+}
+
+.lead-ranking-row.under-appeal b {
+  color: #ff5a66;
+}
+
+.lead-ranking-row.under-appeal small {
+  color: #ff5a66;
+}
+
+.lead-ranking-row.lead-dns strong {
+  visibility: hidden;
+}
+
+.lead-axis-wrap {
+  height: calc(100vh - 240px);
+  min-height: 720px;
+  padding: 55px 14px 55px 86px;
+  border: 1px solid #2b4962;
+  border-radius: 8px;
+  background: #0b1219;
+  position: relative;
+  overflow: hidden;
+}
+
+.lead-axis {
+  height: 100%;
+  position: relative;
+  border-left: 2px dotted #5f7080;
+}
+
+.lead-axis-mark {
+  position: absolute;
+  left: -58px;
+  width: 48px;
+  border-top: 1px solid #1f3144;
+  color: #8fa2b3;
+  font-size: 11px;
+}
+
+.lead-axis-point {
+  position: absolute;
+  left: -7px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  transform: translateY(50%);
+  z-index: 2;
+}
+
+.lead-axis-point span {
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  background: #ffcf5c;
+  border: 2px solid #0b1219;
+}
+
+.lead-axis-point b {
+  color: #7f92a3;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.lead-axis-point.lead-climbing span {
+  background: #35d07f;
+  box-shadow: 0 0 0 4px rgba(53, 208, 127, 0.18);
+  animation: active-pulse 1.2s ease-in-out infinite;
+}
+
+.lead-axis-point.lead-climbing {
+  z-index: 10;
+}
+
+.lead-axis-point.lead-climbing b {
+  color: #dce8f2;
+}
+
+.lead-magnifier-button {
+  position: static;
+  width: 28px;
+  height: 28px;
+  justify-self: auto;
+  font-size: 24px;
+  line-height: 1;
+  display: inline-grid;
+  place-items: center;
+}
+
+.lead-magnifier-button.active {
+  background: #143047;
+  border-color: #7fd7ff;
+  box-shadow: none;
+}
+
+.lead-axis-mobile-toggle {
+  display: none;
+}
+
+.lead-magnifier-cursor {
+  position: absolute;
+  width: 144px;
+  height: 144px;
+  border: 1px solid #7fd7ff;
+  border-radius: 999px;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+  background: rgba(127, 215, 255, 0.06);
+  z-index: 20;
+}
+
+.lead-magnifier-preview {
+  position: absolute;
+  width: 192px;
+  height: 192px;
+  border: 1px solid #7fd7ff;
+  border-radius: 999px;
+  overflow: hidden;
+  background: #0b1219;
+  pointer-events: none;
+  z-index: 21;
+  transform: translate(-50%, -50%);
+}
+
+.lead-magnifier-inner {
+  transform-origin: 0 0;
+  padding: 55px 14px 55px 86px;
+}
+
+.lead-magnifier-inner .lead-axis {
+  height: 100%;
+}
+
+.lead-magnifier-inner .lead-axis-point b {
+  font-size: 4px;
+  margin-left: -7px;
+}
+
+.lead-magnifier-inner .lead-axis-mark {
+  font-size: 4px;
 }
 
 .timeline-item.event-rank strong {
@@ -1203,7 +1540,7 @@ pre {
 }
 
 .theme-light .round-url-row button {
-  background: #cfe4fb;
+  background: #f5f7fb;
   border-color: #2490c3;
   color: #0b2239;
 }
@@ -1296,7 +1633,7 @@ pre {
 }
 
 .theme-light .event-row time {
-  color: #356f9e;
+  color: #006eb8;
 }
 
 .theme-light .group-title,
@@ -1305,7 +1642,8 @@ pre {
 }
 
 .theme-light .link-panel a,
-.theme-light .eyebrow {
+.theme-light .eyebrow,
+.theme-light .discipline-label {
   color: #2490c3;
 }
 
@@ -1357,37 +1695,216 @@ pre {
 }
 
 .theme-light .feed-top-button {
-  background: #cfe4fb;
+  background: #f5f7fb;
   border-color: #2490c3;
   color: #0b2239;
 }
 
+@media (min-width: 1024px) {
+  .tabs button,
+  .round-url-row button,
+  .feed-top-button,
+  .pill-switch,
+  .switch-toggle,
+  .compact-toggle,
+  .error-actions button {
+    transition: background-color 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
+  }
+
+  .tabs button:hover,
+  .round-url-row button:hover,
+  .feed-top-button:hover,
+  .pill-switch:hover,
+  .switch-toggle:hover,
+  .compact-toggle:hover,
+  .error-actions button:hover {
+    background: #143047;
+    border-color: #7fd7ff;
+  }
+
+  .tabs button.active,
+  .pill-switch.active,
+  .switch-toggle.on,
+  .lead-magnifier-button.active {
+    background: #143047;
+    border-color: #7fd7ff;
+  }
+
+  .tabs button:active,
+  .tabs button.active:active,
+  .round-url-row button:active,
+  .feed-top-button:active,
+  .pill-switch:active,
+  .pill-switch.active:active,
+  .switch-toggle:active,
+  .switch-toggle.on:active,
+  .compact-toggle:active,
+  .error-actions button:active,
+  .lead-magnifier-button.active:active {
+    background: #23648f;
+    border-color: #7fd7ff;
+  }
+
+  .lead-magnifier-button.armed {
+    background: #23648f;
+    border-color: #7fd7ff;
+  }
+
+  .theme-light .tabs button,
+  .theme-light .round-url-row button,
+  .theme-light .feed-top-button,
+  .theme-light .pill-switch,
+  .theme-light .switch-toggle,
+  .theme-light .compact-toggle,
+  .theme-light .error-actions button {
+    transition: background-color 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
+  }
+
+  .theme-light .tabs button:hover,
+  .theme-light .round-url-row button:hover,
+  .theme-light .feed-top-button:hover,
+  .theme-light .pill-switch:hover,
+  .theme-light .switch-toggle:hover,
+  .theme-light .compact-toggle:hover,
+  .theme-light .error-actions button:hover {
+    background: #cfe4fb;
+    border-color: #2490c3;
+  }
+
+  .theme-light .tabs button.active,
+  .theme-light .pill-switch.active,
+  .theme-light .switch-toggle.on,
+  .theme-light .lead-magnifier-button.active {
+    background: #cfe4fb;
+    border-color: #2490c3;
+  }
+
+  .theme-light .tabs button:active,
+  .theme-light .tabs button.active:active,
+  .theme-light .round-url-row button:active,
+  .theme-light .feed-top-button:active,
+  .theme-light .pill-switch:active,
+  .theme-light .pill-switch.active:active,
+  .theme-light .switch-toggle:active,
+  .theme-light .switch-toggle.on:active,
+  .theme-light .compact-toggle:active,
+  .theme-light .error-actions button:active,
+  .theme-light .lead-magnifier-button.active:active {
+    background: #8fc7ee;
+    border-color: #2490c3;
+  }
+
+  .theme-light .lead-magnifier-button.armed {
+    background: #8fc7ee;
+    border-color: #2490c3;
+  }
+
+}
+
 .theme-light .event-row.event-rank-up span {
-  color: #c42f7b;
+  color: #f08aa0;
 }
 
 .theme-light .event-row.event-rank-down span {
-  color: #b12e36;
+  color: #d71920;
 }
 
 .theme-light .event-row.event-appeal span {
-  color: #b4232f;
+  color: #d39200;
 }
 
 .theme-light .event-row.event-top span {
-  color: #238255;
+  color: #008e4f;
 }
 
 .theme-light .event-row.event-zone span {
-  color: #1b83aa;
+  color: #0077c8;
 }
 
 .theme-light .event-row.event-start span {
-  color: #d8b400;
+  color: #111827;
+}
+
+.theme-light .event-row.event-fall span {
+  color: #d71920;
 }
 
 .theme-light .event-row.event-default span {
-  color: #263646;
+  color: #111827;
+}
+
+.theme-light .lead-status-card,
+.theme-light .lead-axis-wrap {
+  background: #ffffff;
+  border-color: #cdd8e5;
+}
+
+.theme-light .lead-card-title {
+  color: #2490c3;
+}
+
+.theme-light .lead-athlete-name,
+.theme-light .lead-ranking-row,
+.theme-light .lead-axis-point.lead-climbing b {
+  color: #182433;
+}
+
+.theme-light .lead-athlete-name {
+  color: #4bb887;
+}
+
+.theme-light .lead-meta,
+.theme-light .lead-next,
+.theme-light .lead-axis-mark,
+.theme-light .lead-ranking-row strong {
+  color: #5d6f82;
+}
+
+.theme-light .lead-score,
+.theme-light .lead-ranking-row.lead-climbing b {
+  color: #4bb887;
+}
+
+.theme-light .lead-score-fall,
+.theme-light .lead-ranking-row b,
+.theme-light .lead-ranking-row.lead-fall b {
+  color: #182433;
+}
+
+.theme-light .lead-ranking-row.under-appeal b {
+  color: #b4232f;
+}
+
+.theme-light .lead-ranking-row.under-appeal small {
+  color: #b4232f;
+}
+
+.theme-light .lead-ranking-row.lead-climbing span {
+  color: #4bb887;
+}
+
+.theme-light .lead-ranking-row {
+  border-bottom-color: #dbe3ed;
+}
+
+.theme-light .lead-ranking-row.lead-climbing {
+  border-color: #4bb887;
+}
+
+.theme-light .lead-axis {
+  border-left-color: #8da0b3;
+}
+
+.theme-light .lead-axis-point span {
+  border-color: #ffffff;
+}
+
+.theme-light .lead-axis-point b {
+  color: #6b7785;
+}
+
+.theme-light .lead-magnifier-preview {
+  background: #ffffff;
 }
 
 .theme-light pre {
@@ -1538,6 +2055,7 @@ pre {
 
   .live-layout,
   .athlete-layout,
+  .lead-columns-grid,
   .feed-layout {
     grid-template-columns: 1fr;
     gap: 14px;
@@ -1567,6 +2085,7 @@ pre {
   }
 
   .section-title {
+    min-height: 22px;
     margin-bottom: 7px;
     font-size: 11px;
   }
@@ -1621,20 +2140,37 @@ pre {
   }
 
   .mobile-heading-controls .compact-toggle {
-    width: 42px;
+    width: 46px;
   }
 
   .mobile-heading-controls .compact-toggle.on span {
-    transform: translateX(24px);
+    transform: translateX(28px);
   }
 
   .mobile-heading-controls .compact-toggle strong {
-    padding-left: 12px;
+    padding-left: 14px;
   }
 
   .mobile-heading-controls .compact-toggle.on strong {
     padding-left: 0;
-    padding-right: 12px;
+    padding-right: 14px;
+  }
+
+  .ranking-heading .desktop-heading-switch.compact-toggle {
+    width: 46px;
+  }
+
+  .ranking-heading .desktop-heading-switch.compact-toggle.on span {
+    transform: translateX(28px);
+  }
+
+  .ranking-heading .desktop-heading-switch.compact-toggle strong {
+    padding-left: 14px;
+  }
+
+  .ranking-heading .desktop-heading-switch.compact-toggle.on strong {
+    padding-left: 0;
+    padding-right: 14px;
   }
 
   .mobile-heading-controls .full-label {
@@ -1808,20 +2344,141 @@ pre {
   }
 
   .event-feed-title {
-    display: block;
-    padding-right: 26px;
-    margin-bottom: 7px;
+    display: flex;
+    align-items: center;
+    min-height: 22px;
+    padding-right: 30px;
+    margin-bottom: 8px;
   }
 
   .feed-top-button {
     position: absolute;
-    top: 8px;
+    top: 50%;
     right: 8px;
-    width: 20px;
-    height: 20px;
+    width: 22px;
+    height: 22px;
     border-radius: 5px;
     font-size: 11px;
     line-height: 1;
+    transform: translateY(-50%);
+  }
+
+  .lead-layout {
+    gap: 14px;
+  }
+
+  .lead-heading {
+    min-height: 22px;
+    margin-bottom: 8px;
+  }
+
+  .lead-axis-layout {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+
+  .lead-axis-feed {
+    display: none;
+  }
+
+  .lead-columns-grid {
+    gap: 10px;
+    min-height: 0;
+  }
+
+  .lead-left-column {
+    grid-template-rows: auto;
+    gap: 10px;
+  }
+
+  .lead-column-feed {
+    display: none;
+  }
+
+  .lead-status-card {
+    padding: 10px;
+    border-radius: 7px;
+  }
+
+  .lead-featured {
+    min-height: 92px;
+  }
+
+  .lead-athlete-name {
+    font-size: 16px;
+  }
+
+  .lead-score {
+    font-size: 26px;
+  }
+
+  .lead-ranking-row {
+    height: 30px;
+    grid-template-columns: 36px minmax(0, 1fr) max-content 3ch;
+    column-gap: 2ch;
+    font-size: 11px;
+    padding: 0 14px;
+  }
+
+  .lead-axis-wrap {
+    min-height: 420px;
+    height: calc(100dvh - 250px);
+    padding: 32px 14px 32px 64px;
+  }
+
+  .lead-axis-wrap.expanded {
+    height: calc((100dvh - 250px) * 3);
+    min-height: 1260px;
+  }
+
+  .lead-magnifier-button,
+  .lead-magnifier-cursor,
+  .lead-magnifier-preview {
+    display: none;
+  }
+
+  .lead-axis-mobile-toggle {
+    display: inline-flex;
+    width: 46px;
+    height: 18px;
+  }
+
+  .lead-axis-mobile-toggle span {
+    width: 16px;
+    height: 16px;
+  }
+
+  .lead-axis-mobile-toggle.on span {
+    transform: translateX(28px);
+  }
+
+  .lead-axis-mobile-toggle strong {
+    font-size: 7px;
+    padding-left: 14px;
+  }
+
+  .lead-axis-mobile-toggle.on strong {
+    padding-left: 0;
+    padding-right: 14px;
+  }
+
+  .lead-axis-mobile-toggle .full-label {
+    display: none;
+  }
+
+  .lead-axis-mobile-toggle .short-label {
+    display: inline;
+  }
+
+  .lead-axis-mark {
+    left: -46px;
+    width: 38px;
+  }
+
+  .lead-axis-point b {
+    max-width: calc(100vw - 150px);
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .theme-light .theme-switch {

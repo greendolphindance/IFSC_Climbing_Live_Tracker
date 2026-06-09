@@ -51,8 +51,36 @@ export interface AthleteRoundResult {
   currentBoulder?: number;
   nextBoulder?: number;
   score: number;
+  leadScoreText?: string;
   boulders: BoulderResult[];
   sourceStatus?: string;
+}
+
+export type Discipline = "boulder" | "lead";
+export type LeadRoundType = "Semi-final" | "Final";
+export type LeadGender = "Women" | "Men";
+export type LeadStatus = "waiting" | "climbing" | "fall" | "top" | "dns";
+
+export interface LeadResult {
+  athlete: Athlete;
+  rank: number;
+  hold: number;
+  plus?: boolean;
+  scoreText: string;
+  status: LeadStatus;
+  elapsedSeconds?: number;
+  next?: boolean;
+}
+
+export interface LeadGenderRound {
+  gender: LeadGender;
+  athletes: LeadResult[];
+}
+
+export interface LeadRoundData {
+  roundType: LeadRoundType;
+  routeTop?: number;
+  genders: LeadGenderRound[];
 }
 
 export interface AthleteLiveState {
@@ -101,7 +129,9 @@ export interface CompetitionSnapshot {
   eventName: string;
   roundName: string;
   roundStatus?: string;
+  discipline?: Discipline;
   formatIdentifier?: string;
+  lead?: LeadRoundData;
   athletes: AthleteRoundResult[];
   ranking: RankingEntry[];
   startlist: StartlistEntry[];

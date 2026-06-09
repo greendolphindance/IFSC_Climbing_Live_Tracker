@@ -1,6 +1,6 @@
 import cors from "@fastify/cors";
 import Fastify from "fastify";
-import { createRoundSourceFromEnv, IfscAdapter, IfscRestRoundSource, type RoundSource } from "./adapters/IfscAdapter.js";
+import { createRoundSourceFromEnv, createRoundSourceFromUrl, IfscAdapter, type RoundSource } from "./adapters/IfscAdapter.js";
 import { CompetitionStateMachine } from "./state/CompetitionStateMachine.js";
 import { SnapshotStore } from "./state/SnapshotStore.js";
 
@@ -69,6 +69,7 @@ function readRoundUrl(query: { roundUrl?: string | string[] } | undefined) {
   if (roundUrl === "https://ifsc.results.info/event/0/cr/0") {
     throw new Error("Demo error: this simulates a failed competition link.");
   }
+  if (roundUrl === "demo:lead-semifinal" || roundUrl === "demo:lead-final") return roundUrl;
   if (!/^https:\/\/ifsc\.results\.info\/event\/\d+\/cr\/\d+\/?$/.test(roundUrl)) {
     throw new Error("Unsupported IFSC round URL. Use a URL like https://ifsc.results.info/event/1480/cr/10677");
   }
@@ -78,7 +79,7 @@ function readRoundUrl(query: { roundUrl?: string | string[] } | undefined) {
 function runtimeFor(roundUrl: string) {
   const existing = runtimes.get(roundUrl);
   if (existing) return existing;
-  const source: RoundSource = new IfscRestRoundSource(roundUrl);
+  const source: RoundSource = createRoundSourceFromUrl(roundUrl);
   const runtime = {
     adapter: new IfscAdapter(source),
     machine: new CompetitionStateMachine()

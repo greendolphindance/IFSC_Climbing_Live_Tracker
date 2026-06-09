@@ -1,6 +1,8 @@
 import { fixtureSnapshots } from "../fixtures/roundSnapshots.js";
-import type { Appeal, Athlete, BoulderResult, CompetitionSnapshot, StartlistEntry } from "../types/domain.js";
+import type { Appeal, Athlete, BoulderResult, CompetitionSnapshot, LeadGender, LeadRoundType, LeadStatus, StartlistEntry } from "../types/domain.js";
 import type { Browser, Page } from "playwright";
+
+const DEFAULT_IFSC_ROUND_URL = "https://ifsc.results.info/event/1515/cr/10704";
 
 export interface RoundSource {
   nextSnapshot(): Promise<CompetitionSnapshot>;
@@ -73,6 +75,7 @@ interface IfscRankingEntry {
   ascents?: IfscAscent[];
   active?: boolean;
   under_appeal?: boolean;
+  lead_score_text?: string;
 }
 
 interface IfscRoundPayload {
@@ -88,17 +91,46 @@ interface IfscRoundPayload {
   startlist?: IfscStartlistEntry[];
 }
 
+interface IfscEventRouteMeta {
+  id: number;
+  name: string;
+  startlist?: unknown;
+  ranking?: unknown;
+  [key: string]: unknown;
+}
+
+interface IfscEventRoundMeta {
+  category_round_id?: number;
+  id?: number;
+  kind?: string;
+  format_identifier?: string;
+  routes?: IfscEventRouteMeta[];
+}
+
+interface LeadRouteResult {
+  athleteId: number;
+  scoreText?: string;
+  rank?: number;
+  status?: string;
+}
+
 export class IfscRestRoundSource implements RoundSource {
   private readonly endpoint: string;
   private readonly origin: string;
   private readonly roundUrl: string;
+  private readonly eventId: string;
+  private readonly categoryRoundId: string;
   private cookieHeader = process.env.IFSC_COOKIE ?? "";
   private csrfToken = "";
+  private routeStartlistCache?: IfscStartlistEntry[];
+  private routeRankingCache?: Map<string, LeadRouteResult>;
 
   constructor(roundUrl: string) {
     const parsed = parseRoundUrl(roundUrl);
     this.origin = parsed.origin;
     this.roundUrl = roundUrl;
+    this.eventId = parsed.eventId;
+    this.categoryRoundId = parsed.categoryRoundId;
     this.endpoint = `${parsed.origin}/api/v1/category_rounds/${parsed.categoryRoundId}/results`;
   }
 
@@ -113,7 +145,7 @@ export class IfscRestRoundSource implements RoundSource {
     }
     if (!response.ok) throw new Error(`IFSC request failed ${response.status}: ${this.endpoint}`);
     const payload = unwrapIfscPayload(await response.json());
-    return normalizeIfscPayload(payload, this.endpoint);
+    return normalizeIfscPayload(await this.enrichLeadStartlist(payload), this.endpoint);
   }
 
   sourceName(): "ifsc-network" {
@@ -171,6 +203,49 @@ export class IfscRestRoundSource implements RoundSource {
       if (name && value.length > 0) jar.set(name.trim(), value.join("=").trim());
     }
     this.cookieHeader = [...jar.entries()].map(([name, value]) => `${name}=${value}`).join("; ");
+  }
+
+  private async enrichLeadStartlist(payload: IfscRoundPayload): Promise<IfscRoundPayload> {
+    if (disciplineFromPayload(payload) !== "lead") return payload;
+    const { startlist, ranking } = await this.fetchLeadRouteData().catch(() => ({ startlist: [], ranking: new Map<string, LeadRouteResult>() }));
+    const routeStartlist = startlist.length > 0 ? startlist : this.routeStartlistCache ?? [];
+    const routeRanking = ranking.size > 0 ? ranking : this.routeRankingCache ?? new Map<string, LeadRouteResult>();
+    if (startlist.length > 0) this.routeStartlistCache = startlist;
+    if (ranking.size > 0) this.routeRankingCache = ranking;
+    if (routeStartlist.length === 0 && routeRanking.size === 0) return payload;
+    return {
+      ...payload,
+      startlist: mergeStartlists(payload.startlist ?? [], routeStartlist),
+      ranking: mergeLeadRanking(payload.ranking ?? [], routeRanking, routeStartlist)
+    };
+  }
+
+  private async fetchLeadRouteData(): Promise<{ startlist: IfscStartlistEntry[]; ranking: Map<string, LeadRouteResult> }> {
+    const eventResponse = await fetch(`${this.origin}/api/v1/events/${this.eventId}`, { headers: this.apiHeaders() });
+    this.captureCookies(eventResponse);
+    if (!eventResponse.ok) return { startlist: [], ranking: new Map() };
+    const eventPayload = await eventResponse.json();
+    const round = findEventRoundMeta(eventPayload, this.categoryRoundId);
+    const routes = round?.routes ?? [];
+    const entries: IfscStartlistEntry[] = [];
+    const rankings = new Map<string, LeadRouteResult>();
+    for (const route of routes) {
+      for (const url of routeUrls(route, "startlist", this.origin)) {
+        const response = await fetch(url, { headers: this.apiHeaders() });
+        this.captureCookies(response);
+        if (response.ok) entries.push(...routeStartlistEntriesFromPayload(await response.json(), route));
+      }
+      for (const url of routeUrls(route, "ranking", this.origin)) {
+        const response = await fetch(url, { headers: this.apiHeaders() });
+        this.captureCookies(response);
+        if (response.ok) {
+          for (const result of leadRouteResultsFromPayload(await response.json())) {
+            rankings.set(String(result.athleteId), result);
+          }
+        }
+      }
+    }
+    return { startlist: mergeStartlists([], entries), ranking: rankings };
   }
 }
 
@@ -245,6 +320,12 @@ export class IfscAdapter {
 }
 
 export function createRoundSourceFromEnv(): RoundSource {
+  if (process.env.COMP_SOURCE === "demo-lead-semifinal") {
+    return new DemoLeadRoundSource("Semi-final");
+  }
+  if (process.env.COMP_SOURCE === "demo-lead-final") {
+    return new DemoLeadRoundSource("Final");
+  }
   if (process.env.COMP_SOURCE === "demo-qualification") {
     return new DemoQualificationRoundSource();
   }
@@ -255,12 +336,18 @@ export function createRoundSourceFromEnv(): RoundSource {
     return new DemoSingleGroupRoundSource("Final", 8, [1, 5]);
   }
   if (process.env.COMP_SOURCE === "ifsc-browser") {
-    return new IfscBrowserRoundSource(process.env.IFSC_ROUND_URL ?? "https://ifsc.results.info/event/1480/cr/10385");
+    return new IfscBrowserRoundSource(process.env.IFSC_ROUND_URL ?? DEFAULT_IFSC_ROUND_URL);
   }
   if (process.env.COMP_SOURCE === "ifsc" || process.env.IFSC_ROUND_URL) {
-    return new IfscRestRoundSource(process.env.IFSC_ROUND_URL ?? "https://ifsc.results.info/event/1480/cr/10385");
+    return new IfscRestRoundSource(process.env.IFSC_ROUND_URL ?? DEFAULT_IFSC_ROUND_URL);
   }
-  return new FixtureRoundSource();
+  return new IfscRestRoundSource(DEFAULT_IFSC_ROUND_URL);
+}
+
+export function createRoundSourceFromUrl(roundUrl: string): RoundSource {
+  if (roundUrl === "demo:lead-semifinal") return new DemoLeadRoundSource("Semi-final");
+  if (roundUrl === "demo:lead-final") return new DemoLeadRoundSource("Final");
+  return new IfscRestRoundSource(roundUrl);
 }
 
 export class DemoQualificationRoundSource implements RoundSource {
@@ -408,8 +495,102 @@ export class DemoSingleGroupRoundSource implements RoundSource {
   }
 }
 
+export class DemoLeadRoundSource implements RoundSource {
+  constructor(private readonly roundType: LeadRoundType) {}
+
+  async nextSnapshot(): Promise<CompetitionSnapshot> {
+    const now = new Date().toISOString();
+    const fieldSize = this.roundType === "Final" ? 8 : 24;
+    const leadResults = demoLeadResults("Women", fieldSize, this.roundType === "Final" ? 3 : 8);
+    const athletes = leadResults.map((result) => ({
+      athlete: result.athlete,
+      rank: result.rank,
+      score: leadScore(result.hold, result.plus),
+      boulders: [],
+      sourceStatus: result.status === "climbing" ? "active" : result.status
+    }));
+
+    return {
+      sourceTimestamp: now,
+      receivedAt: now,
+      eventId: "demo",
+      categoryRoundId: `demo-lead-${this.roundType.toLowerCase()}`,
+      eventName: `Demo IFSC Lead ${this.roundType}`,
+      roundName: `Lead ${this.roundType}`,
+      roundStatus: "live",
+      discipline: "lead",
+      formatIdentifier: this.roundType === "Final" ? "lead_finals_ifsc_2026" : "lead_semifinals_ifsc_2026",
+      lead: {
+        roundType: this.roundType,
+        routeTop: 50,
+        genders: [{ gender: "Women", athletes: leadResults }]
+      },
+      athletes,
+      ranking: athletes.map((result) => ({ athleteId: result.athlete.id, rank: result.rank, score: result.score })),
+      startlist: athletes.map((result) => ({ athleteId: result.athlete.id, order: result.athlete.startOrder })),
+      appeals: [{
+        athleteId: leadResults.find((result) => result.status === "fall")?.athlete.id ?? leadResults[0].athlete.id,
+        status: "Under Appeal",
+        sourceText: "Demo lead score under appeal",
+        confidence: { value: 96, reason: "Demo lead appeal.", source: "official" }
+      }],
+      rawRef: `demo://lead-${this.roundType.toLowerCase()}`
+    };
+  }
+
+  sourceName(): "fixture" {
+    return "fixture";
+  }
+
+  refreshMs(): number {
+    return 2_000;
+  }
+}
+
 function demoAthlete(id: string, name: string, country: string, startOrder: number): Athlete {
   return { id, name, country, countryCode: iso3ToIso2(country), bib: startOrder, startOrder };
+}
+
+function demoLeadResults(gender: LeadGender, fieldSize: number, activeOrder: number) {
+  const routeTop = 50;
+  const countries = ["GBR", "FRA", "JPN", "JPN", "JPN", "AUS", "USA", "ISR", "ITA", "KOR", "CHN", "SLO", "ESP", "AUT", "GER", "SUI", "BEL", "CZE", "POL", "CAN", "BRA", "NOR", "SWE", "NZL"];
+  const results = Array.from({ length: fieldSize }, (_, index) => {
+    const order = index + 1;
+    const active = order === activeOrder;
+    const dns = order === fieldSize;
+    const top = order === 1 && fieldSize === 8;
+    const fallScores = [44, 43, 42, 39, 38, 37, 36, 32, 30, 29, 28, 26, 25, 23, 22, 21, 19, 18, 16, 15, 13, 12, 10, 8];
+    const hold = dns ? 0 : top ? routeTop : active ? 38 : fallScores[index % fallScores.length];
+    const plus = active || index % 4 === 0;
+    const status: LeadStatus = dns ? "dns" : active ? "climbing" : top ? "top" : order < activeOrder ? "fall" : "waiting";
+    return {
+      athlete: demoAthlete(`lead-${gender[0].toLowerCase()}-${order}`, `${gender[0]}. ${demoName(index)}`, countries[index % countries.length], order),
+      rank: order,
+      hold,
+      plus: status === "top" || status === "dns" ? false : plus,
+      scoreText: status === "dns" ? "DNS" : status === "waiting" ? "-" : leadScoreText(hold, status === "top" ? false : plus, routeTop),
+      status,
+      elapsedSeconds: active ? 184 : undefined,
+      next: order === activeOrder + 1
+    };
+  });
+  return results
+    .sort((a, b) => leadScore(b.hold, b.plus) - leadScore(a.hold, a.plus) || a.athlete.startOrder - b.athlete.startOrder)
+    .map((result, index) => ({ ...result, rank: result.status === "dns" ? 0 : result.status === "waiting" ? result.athlete.startOrder : index + 1 }))
+    .sort((a, b) => rankSortValue(a.rank) - rankSortValue(b.rank) || a.athlete.startOrder - b.athlete.startOrder);
+}
+
+function rankSortValue(rank: number) {
+  return rank > 0 ? rank : 9999;
+}
+
+function leadScore(hold: number, plus?: boolean) {
+  return hold + (plus ? 0.25 : 0);
+}
+
+function leadScoreText(hold: number, plus?: boolean, routeTop = 100) {
+  if (hold >= routeTop) return "TOP";
+  return `${Math.floor(hold)}${plus ? "+" : ""}`;
 }
 
 function demoQualificationEntries(prefix: "qa" | "qb", group: "Group A" | "Group B"): [string, string, string, "Group A" | "Group B", number, number][] {
@@ -554,7 +735,8 @@ export function normalizeIfscPayload(payload: IfscRoundPayload, endpoint: string
       groupRank: ranking?.group_rank === undefined || ranking?.group_rank === null ? undefined : numberOrFallback(ranking.group_rank, 999),
       startingGroup: ranking?.starting_group ?? undefined,
       currentBoulder,
-      score: numberOrFallback(ranking?.score, 0),
+      score: leadScoreNumber(ranking?.lead_score_text ?? ranking?.score),
+      leadScoreText: ranking?.lead_score_text ?? (typeof ranking?.score === "string" ? ranking.score : undefined),
       boulders: normalizeBoulderStatuses(boulders, resultStatus, currentBoulder),
       sourceStatus: ranking?.active ? "active" : ranking?.under_appeal ? "under_appeal" : resultStatus
     };
@@ -568,7 +750,9 @@ export function normalizeIfscPayload(payload: IfscRoundPayload, endpoint: string
     eventName: payload.event ?? "IFSC Boulder Competition",
     roundName: `${payload.category ?? "Category"} ${payload.round ?? "Round"}`,
     roundStatus: payload.status,
+    discipline: disciplineFromPayload(payload),
     formatIdentifier: payload.format_identifier,
+    lead: disciplineFromPayload(payload) === "lead" ? leadDataFromPayload(payload, athletes) : undefined,
     athletes,
     ranking: ranking.map((entry) => ({
       athleteId: String(entry.athlete_id),
@@ -579,6 +763,282 @@ export function normalizeIfscPayload(payload: IfscRoundPayload, endpoint: string
     appeals: buildAppeals(ranking),
     rawRef: endpoint
   };
+}
+
+function disciplineFromPayload(payload: IfscRoundPayload) {
+  const text = `${payload.format_identifier ?? ""} ${payload.category ?? ""} ${payload.round ?? ""}`.toLowerCase();
+  return text.includes("lead") ? "lead" : "boulder";
+}
+
+function leadDataFromPayload(payload: IfscRoundPayload, athletes: CompetitionSnapshot["athletes"]): CompetitionSnapshot["lead"] {
+  const roundText = `${payload.round ?? ""}`.toLowerCase();
+  const roundType: LeadRoundType = roundText.includes("final") && !roundText.includes("semi") ? "Final" : "Semi-final";
+  const categoryText = `${payload.category ?? ""}`.toLowerCase();
+  const gender: LeadGender = categoryText.includes("men") && !categoryText.includes("women") ? "Men" : "Women";
+  const leadAthletes = athletes
+    .sort((a, b) => a.rank - b.rank || b.score - a.score || a.athlete.startOrder - b.athlete.startOrder)
+    .map((result) => {
+      const parsedScore = parseLeadScore(result.leadScoreText ?? result.score);
+      const hold = parsedScore.hold > 0 ? parsedScore.hold : leadHoldFromBoulders(result.boulders);
+      const plus = parsedScore.plus;
+      const status: LeadStatus = isDnsStatus(result.sourceStatus) ? "dns" : result.sourceStatus === "active" ? "climbing" : hold >= 100 ? "top" : hold > 0 ? "fall" : "waiting";
+      return {
+        athlete: result.athlete,
+        rank: status === "dns" ? 0 : result.rank,
+        hold,
+        plus,
+        scoreText: status === "dns" ? "DNS" : status === "waiting" ? "-" : leadScoreTextFromParsed(result.leadScoreText, hold, plus),
+        status,
+        elapsedSeconds: status === "climbing" ? 148 : undefined,
+        next: result.sourceStatus === "waiting"
+      };
+    });
+  return {
+    roundType,
+    genders: [{ gender, athletes: leadAthletes }]
+  };
+}
+
+function leadScoreNumber(value: number | string | null | undefined) {
+  const parsed = parseLeadScore(value ?? 0);
+  if (parsed.dns) return 0;
+  return parsed.hold + (parsed.plus ? 0.25 : 0);
+}
+
+function parseLeadScore(value: number | string) {
+  const text = String(value);
+  if (/\bDNS\b|did not start/i.test(text)) return { hold: 0, plus: false, dns: true };
+  if (/TOP/i.test(text)) return { hold: 100, plus: false, dns: false };
+  const hold = Number(text.match(/\d+/)?.[0] ?? 0);
+  return { hold: Number.isFinite(hold) ? hold : 0, plus: /\+/.test(text), dns: false };
+}
+
+function leadScoreTextFromParsed(raw: string | undefined, hold: number, plus?: boolean) {
+  if (raw) {
+    if (/\bDNS\b/i.test(raw)) return "DNS";
+    if (/TOP/i.test(raw)) return "TOP";
+    const match = raw.match(/\d+\+?/);
+    if (match) return match[0];
+  }
+  return leadScoreText(hold, plus);
+}
+
+function leadHoldFromBoulders(boulders: BoulderResult[]) {
+  return Math.max(0, ...boulders.map((boulder) => Number(boulder.rawStatus?.match(/\d+(?:\.\d+)?/)?.[0] ?? 0)));
+}
+
+function findEventRoundMeta(value: unknown, categoryRoundId: string): IfscEventRoundMeta | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const record = value as IfscEventRoundMeta & Record<string, unknown>;
+  const id = record.category_round_id ?? record.id;
+  if (String(id) === categoryRoundId && Array.isArray(record.routes)) return record;
+  for (const child of Object.values(record)) {
+    if (Array.isArray(child)) {
+      for (const item of child) {
+        const found = findEventRoundMeta(item, categoryRoundId);
+        if (found) return found;
+      }
+    } else if (child && typeof child === "object") {
+      const found = findEventRoundMeta(child, categoryRoundId);
+      if (found) return found;
+    }
+  }
+  return undefined;
+}
+
+function routeUrls(route: IfscEventRouteMeta, kind: "startlist" | "ranking", origin: string) {
+  const keys = kind === "startlist"
+    ? ["startlist", "startlist_url", "startlistUrl", "start_list", "start_list_url"]
+    : ["ranking", "ranking_url", "rankingUrl", "result", "result_url", "resultUrl", "results", "results_url", "resultsUrl"];
+  const urls = new Set<string>();
+  for (const key of keys) {
+    for (const value of urlValues(route[key])) urls.add(normalizeIfscUrl(value, origin));
+  }
+  if (route.id) {
+    const base = `${origin}/api/v1/routes/${route.id}`;
+    if (kind === "startlist") {
+      urls.add(`${base}/startlist`);
+      urls.add(`${base}/starters`);
+    } else {
+      urls.add(`${base}/ranking`);
+      urls.add(`${base}/results`);
+    }
+  }
+  return [...urls];
+}
+
+function urlValues(value: unknown): string[] {
+  if (typeof value === "string" && value.trim()) return [value.trim()];
+  if (Array.isArray(value)) return value.flatMap(urlValues);
+  if (!value || typeof value !== "object") return [];
+  const record = value as Record<string, unknown>;
+  return ["url", "href", "path", "api", "endpoint"].flatMap((key) => urlValues(record[key]));
+}
+
+function normalizeIfscUrl(value: string, origin: string) {
+  if (/^https?:\/\//.test(value)) return value;
+  return `${origin}${value.startsWith("/") ? "" : "/"}${value}`;
+}
+
+function routeStartlistEntriesFromPayload(payload: unknown, route: IfscEventRouteMeta): IfscStartlistEntry[] {
+  return candidateArrays(payload)
+    .flatMap((items) => items.map((item, index) => startlistEntryFromRouteItem(item, index, route)).filter(Boolean) as IfscStartlistEntry[])
+    .filter((entry, index, entries) => entries.findIndex((candidate) => candidate.athlete_id === entry.athlete_id) === index);
+}
+
+function leadRouteResultsFromPayload(payload: unknown): LeadRouteResult[] {
+  return candidateArrays(payload)
+    .flatMap((items) => items.map(leadRouteResultFromItem).filter(Boolean) as LeadRouteResult[])
+    .filter((entry, index, entries) => entries.findIndex((candidate) => candidate.athleteId === entry.athleteId) === index);
+}
+
+function leadRouteResultFromItem(value: unknown): LeadRouteResult | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const record = value as Record<string, unknown>;
+  const athleteId = startlistAthleteId(record);
+  if (athleteId === undefined) return undefined;
+  const scoreText = leadScoreTextFromRouteRecord(record);
+  const rank = numberOrUndefined(record.rank) ?? numberOrUndefined(record.route_rank) ?? numberOrUndefined(record.result_rank);
+  const status = stringValue(record.status) ?? stringValue(record.result) ?? stringValue(record.display_status);
+  return { athleteId, scoreText, rank, status };
+}
+
+function leadScoreTextFromRouteRecord(record: Record<string, unknown>): string | undefined {
+  for (const key of ["score", "result", "height", "hold", "points", "display_score", "displayScore", "scoreText", "result_text"]) {
+    const value = record[key];
+    if (typeof value === "string" && value.trim()) return value.trim();
+    if (typeof value === "number" && Number.isFinite(value) && value > 0) return String(value);
+  }
+  const nested = typeof record.ascent === "object" && record.ascent ? record.ascent as Record<string, unknown> : undefined;
+  return nested ? leadScoreTextFromRouteRecord(nested) : undefined;
+}
+
+function numberOrUndefined(value: unknown) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function candidateArrays(value: unknown): unknown[][] {
+  const arrays: unknown[][] = [];
+  const visit = (item: unknown) => {
+    if (!item || typeof item !== "object") return;
+    if (Array.isArray(item)) {
+      if (item.some((entry) => startlistAthleteId(entry) !== undefined)) arrays.push(item);
+      item.forEach(visit);
+      return;
+    }
+    Object.values(item).forEach(visit);
+  };
+  visit(value);
+  return arrays;
+}
+
+function startlistEntryFromRouteItem(value: unknown, index: number, route: IfscEventRouteMeta): IfscStartlistEntry | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const record = value as Record<string, unknown>;
+  const athlete = typeof record.athlete === "object" && record.athlete ? record.athlete as Record<string, unknown> : {};
+  const athleteId = startlistAthleteId(record);
+  if (athleteId === undefined) return undefined;
+  const firstname = stringValue(record.firstname) ?? stringValue(athlete.firstname);
+  const lastname = stringValue(record.lastname) ?? stringValue(athlete.lastname);
+  const name = stringValue(record.name) ?? stringValue(athlete.name) ?? [firstname, lastname].filter(Boolean).join(" ");
+  const country = stringValue(record.country) ?? stringValue(athlete.country) ?? stringValue(athlete.nationality) ?? "";
+  const position = numberOrFallback(record.position as number | string | null | undefined, numberOrFallback(record.start_order as number | string | null | undefined, numberOrFallback(record.order as number | string | null | undefined, index + 1)));
+  return {
+    athlete_id: athleteId,
+    name: name || `Athlete ${athleteId}`,
+    firstname,
+    lastname,
+    bib: stringValue(record.bib) ?? stringValue(athlete.bib),
+    country,
+    route_start_positions: [{
+      route_name: route.name,
+      route_id: route.id,
+      position
+    }]
+  };
+}
+
+function startlistAthleteId(value: unknown) {
+  if (!value || typeof value !== "object") return undefined;
+  const record = value as Record<string, unknown>;
+  const athlete = typeof record.athlete === "object" && record.athlete ? record.athlete as Record<string, unknown> : {};
+  const id = record.athlete_id ?? athlete.id ?? record.athleteId;
+  const parsed = Number(id);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function stringValue(value: unknown) {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function mergeStartlists(primary: IfscStartlistEntry[], fallback: IfscStartlistEntry[]) {
+  const entries = new Map<string, IfscStartlistEntry>();
+  for (const entry of [...fallback, ...primary]) {
+    const id = String(entry.athlete_id);
+    const existing = entries.get(id);
+    entries.set(id, {
+      ...entry,
+      route_start_positions: mergeRoutePositions(existing?.route_start_positions ?? [], entry.route_start_positions ?? [])
+    });
+  }
+  return [...entries.values()].sort((a, b) => startOrderFromStartlist(a) - startOrderFromStartlist(b) || a.name.localeCompare(b.name));
+}
+
+function mergeRoutePositions(left: IfscRoutePosition[], right: IfscRoutePosition[]) {
+  const positions = new Map<string, IfscRoutePosition>();
+  for (const position of [...left, ...right]) positions.set(String(position.route_id || position.route_name), position);
+  return [...positions.values()].sort((a, b) => a.position - b.position);
+}
+
+function mergeLeadRanking(primary: IfscRankingEntry[], fallback: Map<string, LeadRouteResult>, startlist: IfscStartlistEntry[]) {
+  const ranking = new Map(primary.map((entry) => [String(entry.athlete_id), { ...entry }]));
+  const startlistById = new Map(startlist.map((entry) => [String(entry.athlete_id), entry]));
+  for (const [athleteId, result] of fallback) {
+    const existing = ranking.get(athleteId);
+    const start = startlistById.get(athleteId);
+    const startOrder = start ? startOrderFromStartlist(start) : 999;
+    const mergedScore = hasMeaningfulLeadScore(existing?.score) ? existing?.score : result.scoreText ?? existing?.score ?? 0;
+    ranking.set(athleteId, {
+      athlete_id: result.athleteId,
+      name: existing?.name ?? start?.name ?? `Athlete ${athleteId}`,
+      firstname: existing?.firstname ?? start?.firstname,
+      lastname: existing?.lastname ?? start?.lastname,
+      country: existing?.country ?? start?.country ?? "",
+      bib: existing?.bib ?? start?.bib,
+      status: existing?.status ?? result.status,
+      rank: existing?.rank ?? result.rank ?? startOrder,
+      score: mergedScore,
+      start_order: existing?.start_order ?? startOrder,
+      active: existing?.active,
+      under_appeal: existing?.under_appeal,
+      ascents: existing?.ascents,
+      lead_score_text: existing?.lead_score_text ?? result.scoreText
+    });
+  }
+  for (const start of startlist) {
+    const id = String(start.athlete_id);
+    if (ranking.has(id)) continue;
+    ranking.set(id, {
+      athlete_id: start.athlete_id,
+      name: start.name,
+      firstname: start.firstname,
+      lastname: start.lastname,
+      country: start.country,
+      bib: start.bib,
+      rank: startOrderFromStartlist(start),
+      score: 0,
+      start_order: startOrderFromStartlist(start),
+      status: "waiting"
+    });
+  }
+  return [...ranking.values()];
+}
+
+function hasMeaningfulLeadScore(value: unknown) {
+  if (value === undefined || value === null) return false;
+  const text = String(value).trim();
+  return text !== "" && text !== "-" && text !== "0" && text !== "0.0";
 }
 
 function unwrapIfscPayload(payload: unknown): IfscRoundPayload {

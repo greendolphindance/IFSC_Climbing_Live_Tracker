@@ -21,9 +21,7 @@ export class CompetitionStateMachine {
   private rankChanges: RankChange[] = [];
 
   apply(snapshot: CompetitionSnapshot, source: CompetitionState["connection"]["source"], refreshMs: number): CompetitionState {
-    const deltaEvents = this.previous
-      ? this.diffSnapshots(this.previous, snapshot)
-      : [this.snapshotReceived(snapshot), ...this.initialLiveEvents(snapshot), ...this.initialExpiredEvents(snapshot), ...this.initialAppealEvents(snapshot)];
+    const deltaEvents = this.previous ? this.diffSnapshots(this.previous, snapshot) : this.initialEvents(snapshot);
     this.events = [...deltaEvents, ...this.events].slice(0, 500);
     this.rankChanges = [
       ...deltaEvents
@@ -81,18 +79,24 @@ export class CompetitionStateMachine {
 
     events.push(...this.diffActiveGroups(previous, next));
     events.push(...this.diffExpiredGroups(previous, next));
+    events.push(...this.diffRoundStatus(previous, next));
 
     for (const [athleteId, current] of nextByAthlete) {
       const before = previousByAthlete.get(athleteId);
       if (!before) continue;
       events.push(...this.diffBoulders(before, current, next.receivedAt));
-      if (before.rank !== current.rank) {
+      if (before.rank !== current.rank && current.rank < before.rank) {
+        const overtaken = current.rank < before.rank
+          ? previous.athletes.find((result) => result.rank === current.rank && result.athlete.id !== athleteId)
+          : undefined;
         events.push({
           id: this.eventId("rank", next.receivedAt, athleteId),
           timestamp: next.receivedAt,
           type: "RANK_CHANGED",
           athleteId,
-          message: `${current.athlete.name} moved from Rank ${before.rank} -> Rank ${current.rank}`,
+          message: overtaken
+            ? `${current.athlete.name} (${scoreLabel(current)}) passed ${overtaken.athlete.name} (${scoreLabel(overtaken)})`
+            : `${current.athlete.name} moved from Rank ${before.rank} -> Rank ${current.rank}`,
           priority: "high",
           reason: `Rank ${before.rank} -> ${current.rank}`,
           source: "official"
@@ -167,6 +171,13 @@ export class CompetitionStateMachine {
         source: appeal.confidence.source
       } satisfies CompetitionEvent];
     });
+  }
+
+  private diffRoundStatus(previous: CompetitionSnapshot, next: CompetitionSnapshot): CompetitionEvent[] {
+    const before = roundStatusKind(previous);
+    const after = roundStatusKind(next);
+    if (!after || before === after) return [];
+    return [this.roundStatusEvent(next, after)];
   }
 
   private buildLiveStates(snapshot: CompetitionSnapshot, previous: CompetitionSnapshot | undefined, deltaEvents: CompetitionEvent[]): AthleteLiveState[] {
@@ -256,6 +267,12 @@ export class CompetitionStateMachine {
     };
   }
 
+  private initialEvents(snapshot: CompetitionSnapshot): CompetitionEvent[] {
+    const statusEvents = this.initialRoundStatusEvents(snapshot);
+    if (statusEvents.length > 0) return [this.snapshotReceived(snapshot), ...statusEvents];
+    return [this.snapshotReceived(snapshot), ...this.initialLiveEvents(snapshot), ...this.initialLeadEvents(snapshot), ...this.initialExpiredEvents(snapshot), ...this.initialAppealEvents(snapshot)];
+  }
+
   private initialAppealEvents(snapshot: CompetitionSnapshot): CompetitionEvent[] {
     return snapshot.appeals.map((appeal) => {
       const athlete = snapshot.athletes.find((result) => result.athlete.id === appeal.athleteId)?.athlete;
@@ -275,6 +292,66 @@ export class CompetitionStateMachine {
 
   private initialLiveEvents(snapshot: CompetitionSnapshot): CompetitionEvent[] {
     return this.startedGroupEvents(activeResults(snapshot), snapshot.receivedAt);
+  }
+
+  private initialRoundStatusEvents(snapshot: CompetitionSnapshot): CompetitionEvent[] {
+    const status = roundStatusKind(snapshot);
+    return status ? [this.roundStatusEvent(snapshot, status)] : [];
+  }
+
+  private initialLeadEvents(snapshot: CompetitionSnapshot): CompetitionEvent[] {
+    if (snapshot.discipline !== "lead" || !snapshot.lead) return [];
+    const athletes = snapshot.lead.genders.flatMap((group) => group.athletes);
+    const active = athletes.find((athlete) => athlete.status === "climbing");
+    const top = athletes.find((athlete) => athlete.status === "top");
+    const bestFall = athletes.find((athlete) => athlete.status === "fall");
+    const sortedRanked = athletes.filter((athlete) => athlete.status !== "dns").sort((a, b) => a.rank - b.rank);
+    const leader = sortedRanked[0];
+    const runnerUp = sortedRanked[1];
+    return [
+      active && {
+        id: this.eventId("lead-started", snapshot.receivedAt, active.athlete.id),
+        timestamp: snapshot.receivedAt,
+        type: "CLIMBER_STARTED",
+        athleteId: active.athlete.id,
+        message: `${active.athlete.name} started lead route`,
+        priority: "normal",
+        reason: "Lead active athlete present in snapshot.",
+        source: "official"
+      },
+      top && {
+        id: this.eventId("lead-top", snapshot.receivedAt, top.athlete.id),
+        timestamp: snapshot.receivedAt,
+        type: "TOP_REACHED",
+        athleteId: top.athlete.id,
+        message: `${top.athlete.name} topped lead route`,
+        priority: "high",
+        reason: top.scoreText,
+        source: "official"
+      },
+      bestFall && {
+        id: this.eventId("lead-fall", snapshot.receivedAt, bestFall.athlete.id),
+        timestamp: snapshot.receivedAt,
+        type: "ATTEMPT_UPDATED",
+        athleteId: bestFall.athlete.id,
+        message: `${bestFall.athlete.name} fell at ${bestFall.scoreText}`,
+        priority: "normal",
+        reason: "lead-fall",
+        source: "official"
+      },
+      leader && {
+        id: this.eventId("lead-rank", snapshot.receivedAt, leader.athlete.id),
+        timestamp: snapshot.receivedAt,
+        type: "RANK_CHANGED",
+        athleteId: leader.athlete.id,
+        message: runnerUp
+          ? `${leader.athlete.name} (${leader.scoreText}) passed ${runnerUp.athlete.name} (${runnerUp.scoreText})`
+          : `${leader.athlete.name} moved from Rank 2 -> Rank 1`,
+        priority: "high",
+        reason: "Rank 2 -> 1",
+        source: "derived"
+      }
+    ].filter(Boolean) as CompetitionEvent[];
   }
 
   private initialExpiredEvents(snapshot: CompetitionSnapshot): CompetitionEvent[] {
@@ -322,6 +399,18 @@ export class CompetitionStateMachine {
     });
   }
 
+  private roundStatusEvent(snapshot: CompetitionSnapshot, status: "not-started" | "finished"): CompetitionEvent {
+    return {
+      id: this.eventId("round-status", snapshot.receivedAt, status),
+      timestamp: snapshot.receivedAt,
+      type: "ATTEMPT_UPDATED",
+      message: status === "finished" ? "Competition finished" : "Competition not started",
+      priority: "normal",
+      reason: snapshot.roundStatus ?? status,
+      source: "official"
+    };
+  }
+
   private athleteEvent(type: CompetitionEvent["type"], result: AthleteRoundResult, boulder: BoulderResult, timestamp: string, message: string, source: CompetitionEvent["source"]): CompetitionEvent {
     return {
       id: this.eventId(type, timestamp, `${result.athlete.id}-${boulder.boulderNo}`),
@@ -361,12 +450,23 @@ function isExpiredStatus(rawStatus?: string) {
   return /expired|timeout|time/i.test(rawStatus ?? "");
 }
 
+function roundStatusKind(snapshot: CompetitionSnapshot): "not-started" | "finished" | undefined {
+  const status = String(snapshot.roundStatus ?? "").toLowerCase();
+  if (/finished|complete|closed|archived|ended/.test(status)) return "finished";
+  if (/not started|not_started|upcoming|scheduled|pending/.test(status)) return "not-started";
+  return undefined;
+}
+
 function currentOutcome(result: AthleteRoundResult) {
   const boulder = result.boulders.find((item) => item.boulderNo === result.currentBoulder);
   if (!boulder) return "No score";
   if (boulder.hasTop) return "Top";
   if (boulder.hasZone) return "Zone";
   return "No score";
+}
+
+function scoreLabel(result: AthleteRoundResult) {
+  return Number(result.score).toFixed(1);
 }
 
 function elapsedFrom(startIso: string, endIso: string) {
